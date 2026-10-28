@@ -479,24 +479,39 @@ export default function App() {
           {/* Bottom Panel Result: Total Distance & Fitness Chart / Benchmark */}
           <div className="h-48 bg-white p-3 rounded-xl shadow-sm border border-slate-200 shrink-0 flex gap-3 overflow-hidden">
             {/* Status Hasil Rute (Kiri) */}
-            <div className="w-1/3 flex flex-col justify-between border-r pr-3">
-              <div>
-                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <div className="w-1/3 flex flex-col justify-between border-r pr-3 min-h-0">
+              <div className="flex flex-col h-full min-h-0">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 shrink-0">
                   Hasil Optimasi
                 </h3>
+
                 {result ? (
-                  <div className="space-y-1">
-                    <div className="text-xl font-black text-indigo-600">
-                      {result.bestDistance.toFixed(2)} km
+                  <div className="flex flex-col h-full min-h-0 space-y-1">
+                    {/* Total Jarak & Waktu Komputasi */}
+                    <div className="shrink-0">
+                      <div className="text-xl font-black text-indigo-600">
+                        {result.bestDistance.toFixed(2)} km
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        Waktu Komputasi: {result.executionTime} ms
+                      </div>
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      Waktu Komputasi: {result.executionTime} ms
-                    </div>
-                    <div className="max-h-24 overflow-y-auto space-y-1 text-[10px] text-slate-600 border-t pt-1">
+
+                    {/* Daftar Rute Detail Armada (Bisa di-scroll secara independen) */}
+                    <div className="flex-1 min-h-0 overflow-y-auto space-y-1 text-[10px] text-slate-600 border-t pt-1.5 pr-1 custom-scrollbar">
                       {result.bestRoutes.map((r, i) => (
-                        <div key={i} className="truncate">
-                          <strong>Armada #{i + 1}:</strong>{" "}
-                          {r.map((c) => locations[c]?.name).join(" ➔ ")}
+                        <div
+                          key={i}
+                          className="bg-slate-50 p-1.5 rounded border border-slate-100 leading-tight"
+                        >
+                          <span className="font-bold text-slate-800 block text-[10px] mb-0.5">
+                            Armada #{i + 1}:
+                          </span>
+                          <span className="text-slate-600">
+                            Depot ➔{" "}
+                            {r.map((c) => locations[c]?.name).join(" ➔ ")} ➔
+                            Depot
+                          </span>
                         </div>
                       ))}
                     </div>
