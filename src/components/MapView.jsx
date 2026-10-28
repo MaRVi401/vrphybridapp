@@ -46,7 +46,7 @@ export default function MapView({ locations, routes, onMapClick }) {
   const center = depot ? [depot.lat, depot.lng] : [-6.200000, 106.816666];
 
   return (
-    <MapContainer center={center} zoom={12} className="w-full h-[500px] rounded-xl shadow-lg">
+    <MapContainer center={center} zoom={11} className="w-full h-full rounded-lg">
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

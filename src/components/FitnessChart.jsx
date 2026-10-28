@@ -1,22 +1,65 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 export default function FitnessChart({ historyData }) {
-  if (!historyData || historyData.length === 0) return null;
+  if (!historyData || historyData.length === 0) {
+    return (
+      <div className="w-full h-full flex items-center justify-center text-xs text-slate-400 italic">
+        Belum ada data konvergensi. Klik 'Jalankan Optimasi'.
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-72 bg-white p-4 rounded-xl shadow-md border border-gray-100">
-      <h3 className="text-lg font-bold text-gray-700 mb-2">Grafik Konvergensi Fitness (Total Jarak vs Generasi)</h3>
-      <ResponsiveContainer width="100%" height="90%">
-        <LineChart data={historyData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="generation" label={{ value: 'Generasi / Iterasi', position: 'insideBottom', offset: -5 }} />
-          <YAxis label={{ value: 'Jarak (km)', angle: -90, position: 'insideLeft' }} />
-          <Tooltip />
-          <Legend />
-          <Line type="monotone" dataKey="fitness" stroke="#2563eb" strokeWidth={2} dot={false} name="Total Jarak (km)" />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="w-full h-full flex flex-col min-h-0">
+      <div className="flex-1 min-h-0 w-full pt-1">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={historyData}
+            margin={{ top: 5, right: 15, left: -20, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis
+              dataKey="generation"
+              tick={{ fontSize: 9, fill: '#64748b' }}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tick={{ fontSize: 9, fill: '#64748b' }}
+              domain={['auto', 'auto']}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#0f172a',
+                borderColor: '#1e293b',
+                borderRadius: '8px',
+                color: '#fff',
+                fontSize: '11px',
+                padding: '4px 8px',
+              }}
+              formatter={(value) => [`${value} km`, 'Total Jarak']}
+              labelFormatter={(label) => `Generasi: ${label}`}
+            />
+            <Line
+              type="monotone"
+              dataKey="fitness"
+              stroke="#4f46e5"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
