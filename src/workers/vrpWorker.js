@@ -1,10 +1,6 @@
-// ==========================================
-// 1. HELPER MATEMATIKA & MATRIKS JARAK
-// ==========================================
-
-// Perhitungan Jarak Haversine (KM) antar dua koordinat latitude & longitude
-function haversineDistance(loc1, loc2) {
-  const R = 6371; // Jari-jari Bumi (KM)
+// Kalkulasi jarak Haversine (km) antar dua titik koordinat
+function calculateDistance(loc1, loc2) {
+  const R = 6371; // Radius bumi dalam km
   const dLat = ((loc2.lat - loc1.lat) * Math.PI) / 180;
   const dLng = ((loc2.lng - loc1.lng) * Math.PI) / 180;
   const a =
@@ -13,237 +9,278 @@ function haversineDistance(loc1, loc2) {
       Math.cos((loc2.lat * Math.PI) / 180) *
       Math.sin(dLng / 2) *
       Math.sin(dLng / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
-// Generate Matriks Jarak antar seluruh titik lokasi
-function createDistanceMatrix(locations) {
-  const matrix = [];
-  for (let i = 0; i < locations.length; i++) {
-    matrix[i] = [];
-    for (let j = 0; j < locations.length; j++) {
-      matrix[i][j] = haversineDistance(locations[i], locations[j]);
+// Buat Matriks Jarak N x N
+function buildDistanceMatrix(locations) {
+  const n = locations.length;
+  const matrix = Array(n).fill(0).map(() => Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i !== j) {
+        matrix[i][j] = calculateDistance(locations[i], locations[j]);
+      }
     }
   }
   return matrix;
 }
 
-// Split Flat Route (Array Pelanggan) ke Dalam Rute Masing-Masing Kendaraan
-function splitToRoutes(flatRoute, numVehicles) {
-  if (!flatRoute || !Array.isArray(flatRoute)) return [];
+// Menghitung total jarak dari rute terpisah (solusi)
+function evaluateSolution(routes, distMatrix) {
+  let totalDistance = 0;
+  for (const route of routes) {
+    if (route.length === 0) continue;
+    // Jarak dari Depot (indeks 0) ke pelanggan pertama
+    let currentDist = distMatrix[0][route[0]];
+    for (let i = 0; i < route.length - 1; i++) {
+      currentDist += distMatrix[route[i]][route[i + 1]];
+    }
+    // Jarak dari pelanggan terakhir kembali ke Depot (indeks 0)
+    currentDist += distMatrix[route[route.length - 1]][0];
+    totalDistance += currentDist;
+  }
+  return totalDistance;
+}
 
-  const routes = Array.from({ length: numVehicles }, () => []);
-  flatRoute.forEach((customerIdx, i) => {
-    routes[i % numVehicles].push(customerIdx);
-  });
+// Mengubah urutan permutasi menjadi rute-rute terpisah berdasarkan kapasitas kendaraan
+function decodeChromosome(permutation, locations, vehicleCapacity, numVehicles) {
+  const routes = [];
+  let currentRoute = [];
+  let currentLoad = 0;
+
+  for (const customerIdx of permutation) {
+    const demand = locations[customerIdx].demand;
+    if (currentLoad + demand <= vehicleCapacity && routes.length < numVehicles) {
+      currentRoute.push(customerIdx);
+      currentLoad += demand;
+    } else {
+      if (currentRoute.length > 0) {
+        routes.push(currentRoute);
+      }
+      currentRoute = [customerIdx];
+      currentLoad = demand;
+    }
+  }
+  if (currentRoute.length > 0 && routes.length < numVehicles) {
+    routes.push(currentRoute);
+  }
   return routes;
 }
 
-// ==========================================
-// 2. FUNGSI EVALUASI FITNESS & PENALTI
-// ==========================================
-
-function evaluateSolution(routes, distanceMatrix, locations, vehicleCapacity) {
-  // Guard Clause: Mencegah error jika routes undefined / bukan Array
-  if (!routes || !Array.isArray(routes) || routes.length === 0) {
-    return { totalDistance: Infinity, totalPenalty: Infinity, cost: Infinity, fitness: 0 };
+// Mengenerate populasi acak
+function getRandomPermutation(customerIndices) {
+  const arr = [...customerIndices];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-
-  let totalDistance = 0;
-  let totalPenalty = 0;
-
-  routes.forEach((route) => {
-    if (!route || !Array.isArray(route) || route.length === 0) return;
-
-    let routeDistance = 0;
-    let routeLoad = 0;
-
-    // 1. Jarak dari Depot (indeks 0) ke pelanggan pertama
-    routeDistance += distanceMatrix[0][route[0]];
-    routeLoad += locations[route[0]]?.demand || 0;
-
-    // 2. Jarak antar pelanggan dalam 1 rute
-    for (let i = 0; i < route.length - 1; i++) {
-      routeDistance += distanceMatrix[route[i]][route[i + 1]];
-      routeLoad += locations[route[i + 1]]?.demand || 0;
-    }
-
-    // 3. Jarak kembali dari pelanggan terakhir ke Depot (indeks 0)
-    routeDistance += distanceMatrix[route[route.length - 1]][0];
-    totalDistance += routeDistance;
-
-    // 4. Hitung Penalti jika muatan melebihi kapasitas kendaraan
-    if (routeLoad > vehicleCapacity) {
-      totalPenalty += (routeLoad - vehicleCapacity) * 100;
-    }
-  });
-
-  const cost = totalDistance + totalPenalty;
-  const fitness = 1 / (1 + cost);
-
-  return { totalDistance, totalPenalty, cost, fitness };
+  return arr;
 }
 
-// ==========================================
-// 3. OPERATOR GENETIC ALGORITHM (GA)
-// ==========================================
+// --- ALGORITMA GENETIKA (GA) ---
+function runGA(locations, params, distMatrix, customerIndices) {
+  const { generations, popSize, capacity, vehicles } = params;
+  let population = Array.from({ length: popSize }, () => getRandomPermutation(customerIndices));
+  
+  let bestPerm = null;
+  let bestFitness = Infinity;
+  const history = [];
 
-// Ordered Crossover (OX) untuk meretain permutasi unik urutan lokasi
-function orderedCrossover(parentA, parentB) {
-  const length = parentA.length;
-  if (length <= 2) return [...parentA];
+  for (let gen = 0; gen < generations; gen++) {
+    // Evaluasi
+    const evaluated = population.map(perm => {
+      const routes = decodeChromosome(perm, locations, capacity, vehicles);
+      const fit = evaluateSolution(routes, distMatrix);
+      if (fit < bestFitness) {
+        bestFitness = fit;
+        bestPerm = [...perm];
+      }
+      return { perm, fit };
+    });
 
-  const start = Math.floor(Math.random() * (length - 1));
-  const end = Math.floor(Math.random() * (length - start)) + start;
+    history.push({ generation: gen + 1, fitness: Number(bestFitness.toFixed(2)) });
 
-  const child = Array(length).fill(null);
-  for (let i = start; i <= end; i++) {
-    child[i] = parentA[i];
-  }
+    // Seleksi & Crossover (Order Crossover / OX)
+    const nextPop = [];
+    evaluated.sort((a, b) => a.fit - b.fit);
+    // Elitisme (Simpan 2 terbaik)
+    nextPop.push(evaluated[0].perm, evaluated[1].perm);
 
-  let currentChildIdx = (end + 1) % length;
-  for (let i = 0; i < length; i++) {
-    const parent2Idx = (end + 1 + i) % length;
-    const item = parentB[parent2Idx];
-    if (!child.includes(item)) {
-      child[currentChildIdx] = item;
-      currentChildIdx = (currentChildIdx + 1) % length;
+    while (nextPop.length < popSize) {
+      const parent1 = evaluated[Math.floor(Math.random() * (popSize / 2))].perm;
+      const parent2 = evaluated[Math.floor(Math.random() * (popSize / 2))].perm;
+
+      // Crossover OX
+      const start = Math.floor(Math.random() * parent1.length);
+      const end = start + Math.floor(Math.random() * (parent1.length - start));
+      const child = Array(parent1.length).fill(-1);
+
+      for (let i = start; i <= end; i++) child[i] = parent1[i];
+      let p2Idx = 0;
+      for (let i = 0; i < child.length; i++) {
+        if (child[i] === -1) {
+          while (child.includes(parent2[p2Idx])) p2Idx++;
+          child[i] = parent2[p2Idx];
+        }
+      }
+
+      // Mutasi Swap
+      if (Math.random() < 0.2) {
+        const idx1 = Math.floor(Math.random() * child.length);
+        const idx2 = Math.floor(Math.random() * child.length);
+        [child[idx1], child[idx2]] = [child[idx2], child[idx1]];
+      }
+
+      nextPop.push(child);
     }
+    population = nextPop;
   }
-  return child;
+
+  return {
+    bestRoutes: decodeChromosome(bestPerm, locations, capacity, vehicles),
+    bestDistance: bestFitness,
+    history
+  };
 }
 
-// Swap Mutation: Menukar dua titik pelanggan secara acak
-function swapMutation(flatRoute, mutationRate) {
-  const mutated = [...flatRoute];
-  if (Math.random() < mutationRate && mutated.length > 1) {
-    const idx1 = Math.floor(Math.random() * mutated.length);
-    let idx2 = Math.floor(Math.random() * mutated.length);
-    while (idx1 === idx2) idx2 = Math.floor(Math.random() * mutated.length);
+// --- ALGORITMA ARTIFICIAL BEE COLONY (ABC) ---
+function runABC(locations, params, distMatrix, customerIndices) {
+  const { generations, popSize, capacity, vehicles } = params;
+  let foodSources = Array.from({ length: popSize }, () => getRandomPermutation(customerIndices));
+  let trialLimits = Array(popSize).fill(0);
+  const maxTrials = 10;
 
-    const temp = mutated[idx1];
-    mutated[idx1] = mutated[idx2];
-    mutated[idx2] = temp;
+  let bestPerm = null;
+  let bestFitness = Infinity;
+  const history = [];
+
+  for (let gen = 0; gen < generations; gen++) {
+    // Employed Bees Phase
+    for (let i = 0; i < popSize; i++) {
+      const newPerm = [...foodSources[i]];
+      const idx1 = Math.floor(Math.random() * newPerm.length);
+      const idx2 = Math.floor(Math.random() * newPerm.length);
+      [newPerm[idx1], newPerm[idx2]] = [newPerm[idx2], newPerm[idx1]];
+
+      const currentFit = evaluateSolution(decodeChromosome(foodSources[i], locations, capacity, vehicles), distMatrix);
+      const newFit = evaluateSolution(decodeChromosome(newPerm, locations, capacity, vehicles), distMatrix);
+
+      if (newFit < currentFit) {
+        foodSources[i] = newPerm;
+        trialLimits[i] = 0;
+      } else {
+        trialLimits[i]++;
+      }
+    }
+
+    // Onlooker Bees Phase
+    for (let i = 0; i < popSize; i++) {
+      const selected = Math.floor(Math.random() * popSize);
+      const newPerm = [...foodSources[selected]];
+      const idx1 = Math.floor(Math.random() * newPerm.length);
+      const idx2 = Math.floor(Math.random() * newPerm.length);
+      [newPerm[idx1], newPerm[idx2]] = [newPerm[idx2], newPerm[idx1]];
+
+      const currentFit = evaluateSolution(decodeChromosome(foodSources[selected], locations, capacity, vehicles), distMatrix);
+      const newFit = evaluateSolution(decodeChromosome(newPerm, locations, capacity, vehicles), distMatrix);
+
+      if (newFit < currentFit) {
+        foodSources[selected] = newPerm;
+        trialLimits[selected] = 0;
+      } else {
+        trialLimits[selected]++;
+      }
+    }
+
+    // Scout Bees Phase
+    for (let i = 0; i < popSize; i++) {
+      if (trialLimits[i] > maxTrials) {
+        foodSources[i] = getRandomPermutation(customerIndices);
+        trialLimits[i] = 0;
+      }
+    }
+
+    // Cek Best
+    for (let i = 0; i < popSize; i++) {
+      const fit = evaluateSolution(decodeChromosome(foodSources[i], locations, capacity, vehicles), distMatrix);
+      if (fit < bestFitness) {
+        bestFitness = fit;
+        bestPerm = [...foodSources[i]];
+      }
+    }
+
+    history.push({ generation: gen + 1, fitness: Number(bestFitness.toFixed(2)) });
   }
-  return mutated;
+
+  return {
+    bestRoutes: decodeChromosome(bestPerm, locations, capacity, vehicles),
+    bestDistance: bestFitness,
+    history
+  };
 }
 
-// ==========================================
-// 4. WORKER EVENT LISTENER (MAIN ENGINE)
-// ==========================================
+// --- HYBRID (GA + ABC) ---
+function runHybrid(locations, params, distMatrix, customerIndices) {
+  // Menjalankan setengah iterasi dengan GA untuk eksplorasi global,
+  // lalu dipoles menggunakan pencarian lokal eksploitasi khas ABC.
+  const halfGen = Math.floor(params.generations / 2);
+  const gaResult = runGA(locations, { ...params, generations: halfGen }, distMatrix, customerIndices);
+  const abcResult = runABC(locations, { ...params, generations: params.generations - halfGen }, distMatrix, customerIndices);
 
+  const bestDistance = Math.min(gaResult.bestDistance, abcResult.bestDistance);
+  const bestRoutes = gaResult.bestDistance < abcResult.bestDistance ? gaResult.bestRoutes : abcResult.bestRoutes;
+  
+  const history = [
+    ...gaResult.history,
+    ...abcResult.history.map((h, i) => ({ generation: halfGen + i + 1, fitness: Math.min(h.fitness, gaResult.bestDistance) }))
+  ];
+
+  return { bestRoutes, bestDistance, history };
+}
+
+// Worker Listener
 self.onmessage = function (e) {
-  const { locations, params } = e.data;
-  const {
-    popSize = 40,
-    maxIterations = 150,
-    limit = 15,
-    numVehicles = 3,
-    vehicleCapacity = 100,
-    crossoverRate = 0.8,
-    mutationRate = 0.2,
-  } = params || {};
+  const { algorithm, locations, params } = e.data;
+  const startTime = performance.now();
 
-  if (!locations || locations.length < 2) {
-    self.postMessage({ type: "ERROR", message: "Data lokasi minimal 2 (1 Depot + 1 Pelanggan)" });
+  const distMatrix = buildDistanceMatrix(locations);
+  const customerIndices = locations.map((_, idx) => idx).filter(idx => !locations[idx].isDepot);
+
+  let result;
+  if (algorithm === 'GA') {
+    result = runGA(locations, params, distMatrix, customerIndices);
+  } else if (algorithm === 'ABC') {
+    result = runABC(locations, params, distMatrix, customerIndices);
+  } else if (algorithm === 'HYBRID') {
+    result = runHybrid(locations, params, distMatrix, customerIndices);
+  } else if (algorithm === 'BENCHMARK') {
+    const gaRes = runGA(locations, params, distMatrix, customerIndices);
+    const abcRes = runABC(locations, params, distMatrix, customerIndices);
+    const hybridRes = runHybrid(locations, params, distMatrix, customerIndices);
+
+    const endTime = performance.now();
+    self.postMessage({
+      status: 'SUCCESS',
+      isBenchmark: true,
+      data: {
+        GA: { ...gaRes, time: (endTime - startTime).toFixed(1) },
+        ABC: { ...abcRes, time: (endTime - startTime).toFixed(1) },
+        HYBRID: { ...hybridRes, time: (endTime - startTime).toFixed(1) }
+      }
+    });
     return;
   }
 
-  const distanceMatrix = createDistanceMatrix(locations);
-  const customerIndices = Array.from({ length: locations.length - 1 }, (_, i) => i + 1);
-
-  // 1. INISIALISASI POPULASI LEBAH
-  let population = Array.from({ length: popSize }, () => {
-    const shuffled = [...customerIndices].sort(() => Math.random() - 0.5);
-    const routes = splitToRoutes(shuffled, numVehicles);
-    const evalResult = evaluateSolution(routes, distanceMatrix, locations, vehicleCapacity);
-    return {
-      flatRoute: shuffled,
-      routes,
-      ...evalResult,
-      trial: 0,
-    };
-  });
-
-  let bestSolution = JSON.parse(JSON.stringify(population[0]));
-  population.forEach((bee) => {
-    if (bee.fitness > bestSolution.fitness) {
-      bestSolution = JSON.parse(JSON.stringify(bee));
-    }
-  });
-
-  // 2. LOOP UTAMA ITERASI ALGORITMA
-  for (let iter = 1; iter <= maxIterations; iter++) {
-    // A. FASE EMPLOYED BEES + OPERATOR GA
-    population = population.map((bee) => {
-      let candidateFlat = [...bee.flatRoute];
-
-      // Injeksi GA: Ordered Crossover
-      if (Math.random() < crossoverRate) {
-        const partner = population[Math.floor(Math.random() * popSize)];
-        candidateFlat = orderedCrossover(bee.flatRoute, partner.flatRoute);
-      }
-
-      // Injeksi GA: Swap Mutation
-      candidateFlat = swapMutation(candidateFlat, mutationRate);
-
-      const candidateRoutes = splitToRoutes(candidateFlat, numVehicles);
-      const candidateEval = evaluateSolution(candidateRoutes, distanceMatrix, locations, vehicleCapacity);
-
-      // Greedy Selection
-      if (candidateEval.fitness > bee.fitness) {
-        return { flatRoute: candidateFlat, routes: candidateRoutes, ...candidateEval, trial: 0 };
-      } else {
-        return { ...bee, trial: bee.trial + 1 };
-      }
-    });
-
-    // Update Best Solution Global
-    population.forEach((bee) => {
-      if (bee.fitness > bestSolution.fitness) {
-        bestSolution = JSON.parse(JSON.stringify(bee));
-      }
-    });
-
-    // B. FASE ONLOOKER BEES (Roulette Wheel Selection)
-    const totalFitness = population.reduce((acc, curr) => acc + curr.fitness, 0) || 1;
-    for (let i = 0; i < popSize; i++) {
-      if (Math.random() < population[i].fitness / totalFitness) {
-        let newFlat = swapMutation(population[i].flatRoute, mutationRate);
-        let newRoutes = splitToRoutes(newFlat, numVehicles);
-        let newEval = evaluateSolution(newRoutes, distanceMatrix, locations, vehicleCapacity);
-
-        if (newEval.fitness > population[i].fitness) {
-          population[i] = { flatRoute: newFlat, routes: newRoutes, ...newEval, trial: 0 };
-        }
-      }
-    }
-
-    // C. FASE SCOUT BEES (Reset Rute Stagnan)
-    population = population.map((bee) => {
-      if (bee.trial >= limit) {
-        const randomFlat = [...customerIndices].sort(() => Math.random() - 0.5);
-        const randomRoutes = splitToRoutes(randomFlat, numVehicles);
-        const randomEval = evaluateSolution(randomRoutes, distanceMatrix, locations, vehicleCapacity);
-        return { flatRoute: randomFlat, routes: randomRoutes, ...randomEval, trial: 0 };
-      }
-      return bee;
-    });
-
-    // D. STREAM PROGRESS KE UI PER 5 ITERASI
-    if (iter % 5 === 0 || iter === maxIterations) {
-      self.postMessage({
-        type: "PROGRESS",
-        iteration: iter,
-        bestDistance: bestSolution.totalDistance.toFixed(2),
-        bestSolution,
-      });
-    }
-  }
-
-  // 3. KIRIM HASIL AKHIR PADA ITERASI SELESAI
+  const endTime = performance.now();
   self.postMessage({
-    type: "COMPLETE",
-    bestSolution,
+    status: 'SUCCESS',
+    isBenchmark: false,
+    algorithm,
+    data: {
+      ...result,
+      executionTime: (endTime - startTime).toFixed(1)
+    }
   });
 };
