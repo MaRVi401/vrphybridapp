@@ -22,7 +22,7 @@ export default function FitnessChart({ historyData, isDarkMode }) {
     <div className="w-full h-full flex flex-col min-h-0">
       <div className="flex-1 min-h-0 w-full pt-1">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={historyData} margin={{ top: 5, right: 15, left: -20, bottom: 0 }}>
+          <LineChart data={historyData} margin={{ top: 5, right: 15, left: -12, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#f1f5f9'} />
             <XAxis
               dataKey="generation"

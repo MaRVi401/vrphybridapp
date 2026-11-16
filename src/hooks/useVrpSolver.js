@@ -26,13 +26,18 @@ export function useVrpSolver() {
       setIsCalculating(false);
     };
 
+    workerRef.current.onerror = (err) => {
+      console.error('VRP Worker Error:', err);
+      setIsCalculating(false);
+    };
+
     return () => {
       if (workerRef.current) workerRef.current.terminate();
     };
   }, []);
 
   const runSolver = (algorithm, locations, params) => {
-    if (!locations || locations.length === 0) return;
+    if (!locations || locations.length === 0 || !workerRef.current) return;
     setIsCalculating(true);
     workerRef.current.postMessage({ algorithm, locations, params });
   };

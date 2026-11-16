@@ -29,13 +29,13 @@ const customerIcon = new L.Icon({
 });
 
 // Warna rute tiap kendaraan
-const routeColors = ['#E63946', '#2A9D8F', '#F4A261', '#9C27B0', '#3F51B5', '#00BCD4'];
+const routeColors = ['#E63946', '#2A9D8F', '#F4A261', '#9C27B0', '#3F51B5', '#00BCD4', '#E91E63', '#8BC34A'];
 
 // Component Listener Klik di Peta
 function MapEventsHandler({ onMapClick }) {
   useMapEvents({
     click(e) {
-      onMapClick(e.latlng);
+      if (onMapClick) onMapClick(e.latlng);
     },
   });
   return null;
@@ -43,7 +43,7 @@ function MapEventsHandler({ onMapClick }) {
 
 export default function MapView({ locations, routes, onMapClick }) {
   const depot = locations.find((l) => l.isDepot) || locations[0];
-  const center = depot ? [depot.lat, depot.lng] : [-6.200000, 106.816666];
+  const center = depot ? [depot.lat, depot.lng] : [-6.3265, 108.32];
 
   return (
     <MapContainer center={center} zoom={11} className="w-full h-full rounded-lg">
@@ -68,7 +68,9 @@ export default function MapView({ locations, routes, onMapClick }) {
                 {loc.isDepot ? 'Titik Depot' : `Demand: ${loc.demand} unit`}
               </span>
               <br />
-              <small className="text-gray-400">Lat: {loc.lat.toFixed(4)}, Lng: {loc.lng.toFixed(4)}</small>
+              <small className="text-gray-400">
+                Lat: {loc.lat.toFixed(4)}, Lng: {loc.lng.toFixed(4)}
+              </small>
             </div>
           </Popup>
         </Marker>
@@ -76,11 +78,20 @@ export default function MapView({ locations, routes, onMapClick }) {
 
       {/* Render Route Lines */}
       {routes &&
+        depot &&
         routes.map((route, rIdx) => {
-          if (!depot || route.length === 0) return null;
+          if (!route || route.length === 0) return null;
+
+          const validWaypoints = route
+            .map((cIdx) => locations[cIdx])
+            .filter(Boolean)
+            .map((loc) => [loc.lat, loc.lng]);
+
+          if (validWaypoints.length === 0) return null;
+
           const polylineCoords = [
             [depot.lat, depot.lng],
-            ...route.map((cIdx) => [locations[cIdx].lat, locations[cIdx].lng]),
+            ...validWaypoints,
             [depot.lat, depot.lng],
           ];
 
@@ -90,7 +101,7 @@ export default function MapView({ locations, routes, onMapClick }) {
               positions={polylineCoords}
               color={routeColors[rIdx % routeColors.length]}
               weight={4}
-              opacity={0.8}
+              opacity={0.85}
             />
           );
         })}
