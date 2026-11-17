@@ -17,7 +17,18 @@ export function useVrpSolver() {
       if (status === 'SUCCESS') {
         if (isBenchmark) {
           setBenchmarkResult(data);
-          setResult(data.HYBRID);
+
+          // Pilih pemenang terbaik: prioritas status Valid (isFeasible), lalu jarak terpendek
+          const bestCandidate = Object.entries(data)
+            .map(([algName, res]) => ({ ...res, winnerAlgorithm: algName }))
+            .sort((a, b) => {
+              if (a.isFeasible !== b.isFeasible) {
+                return a.isFeasible ? -1 : 1;
+              }
+              return a.bestDistance - b.bestDistance;
+            })[0];
+
+          setResult(bestCandidate);
         } else {
           setResult(data);
           setBenchmarkResult(null);

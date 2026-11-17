@@ -1,0 +1,219 @@
+[
+  {
+    "name": "Kecamatan Indramayu (Depot JSON)",
+    "lat": -6.3265,
+    "lng": 108.32,
+    "demand": 0,
+    "isDepot": true
+  },
+  {
+    "name": "Kecamatan Anjatan",
+    "lat": -6.3642,
+    "lng": 107.9512,
+    "demand": 14,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Arahan",
+    "lat": -6.3518,
+    "lng": 108.2584,
+    "demand": 10,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Balongan",
+    "lat": -6.3578,
+    "lng": 108.3745,
+    "demand": 14,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Bangodua",
+    "lat": -6.5265,
+    "lng": 108.2714,
+    "demand": 7,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Bongas",
+    "lat": -6.4015,
+    "lng": 108.0345,
+    "demand": 8,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Cantigi",
+    "lat": -6.3114,
+    "lng": 108.2485,
+    "demand": 9,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Cikedung",
+    "lat": -6.4981,
+    "lng": 108.1582,
+    "demand": 11,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Gabuswetan",
+    "lat": -6.4325,
+    "lng": 108.0712,
+    "demand": 10,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Gantar",
+    "lat": -6.5124,
+    "lng": 107.9585,
+    "demand": 12,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Haurgeulis",
+    "lat": -6.4589,
+    "lng": 107.9421,
+    "demand": 15,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Jatibarang",
+    "lat": -6.4712,
+    "lng": 108.3075,
+    "demand": 16,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Juntinyuat",
+    "lat": -6.4167,
+    "lng": 108.4231,
+    "demand": 11,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Kandanghaur",
+    "lat": -6.3542,
+    "lng": 108.0812,
+    "demand": 16,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Karangampel",
+    "lat": -6.4633,
+    "lng": 108.4522,
+    "demand": 15,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Kedokan Bunder",
+    "lat": -6.4754,
+    "lng": 108.4012,
+    "demand": 10,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Kertasemaya",
+    "lat": -6.5341,
+    "lng": 108.3482,
+    "demand": 9,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Krangkeng",
+    "lat": -6.5182,
+    "lng": 108.4689,
+    "demand": 13,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Kroya",
+    "lat": -6.5042,
+    "lng": 108.0385,
+    "demand": 9,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Lelea",
+    "lat": -6.4385,
+    "lng": 108.2214,
+    "demand": 12,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Lohbener",
+    "lat": -6.4063,
+    "lng": 108.2825,
+    "demand": 11,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Losarang",
+    "lat": -6.3985,
+    "lng": 108.1485,
+    "demand": 15,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Pasekan",
+    "lat": -6.2845,
+    "lng": 108.3185,
+    "demand": 8,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Patrol",
+    "lat": -6.3142,
+    "lng": 107.9785,
+    "demand": 11,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Sindang",
+    "lat": -6.3389,
+    "lng": 108.3042,
+    "demand": 12,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Sliyeg",
+    "lat": -6.4495,
+    "lng": 108.3562,
+    "demand": 13,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Sukagumiwang",
+    "lat": -6.5512,
+    "lng": 108.3595,
+    "demand": 9,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Sukra",
+    "lat": -6.3085,
+    "lng": 107.9214,
+    "demand": 12,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Terisi",
+    "lat": -6.4612,
+    "lng": 108.1145,
+    "demand": 9,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Tukdana",
+    "lat": -6.5385,
+    "lng": 108.2512,
+    "demand": 10,
+    "isDepot": false
+  },
+  {
+    "name": "Kecamatan Widasari",
+    "lat": -6.4892,
+    "lng": 108.2685,
+    "demand": 10,
+    "isDepot": false
+  }
+]

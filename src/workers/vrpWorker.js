@@ -1,6 +1,6 @@
 // Kalkulasi jarak Haversine (km) antar dua titik koordinat
 function calculateDistance(loc1, loc2) {
-  const R = 6371; // Radius bumi dalam km
+  const R = 6371;
   const dLat = ((loc2.lat - loc1.lat) * Math.PI) / 180;
   const dLng = ((loc2.lng - loc1.lng) * Math.PI) / 180;
   const a =
@@ -27,28 +27,35 @@ function buildDistanceMatrix(locations) {
   return matrix;
 }
 
-// Evaluasi total jarak (km) + penalti jika melebihi kapasitas kendaraan
+// Menghitung jarak satu rute tunggal dari Depot -> pelanggan -> Depot
+function getSingleRouteDistance(route, distMatrix, depotIdx) {
+  if (!route || route.length === 0) return 0;
+  let dist = distMatrix[depotIdx][route[0]];
+  for (let i = 0; i < route.length - 1; i++) {
+    dist += distMatrix[route[i]][route[i + 1]];
+  }
+  dist += distMatrix[route[route.length - 1]][depotIdx];
+  return dist;
+}
+
+// Evaluasi total jarak (km) + penalti overload
 function evaluateSolution(routes, distMatrix, depotIdx, locations, vehicleCapacity) {
   let totalDistance = 0;
   let totalPenalty = 0;
-  const PENALTY_WEIGHT = 1000;
+  const OVERLOAD_PENALTY = 1000;
 
   for (const route of routes) {
     if (route.length === 0) continue;
 
-    let currentDist = distMatrix[depotIdx][route[0]];
-    let routeDemand = locations[route[0]].demand || 0;
+    totalDistance += getSingleRouteDistance(route, distMatrix, depotIdx);
 
-    for (let i = 0; i < route.length - 1; i++) {
-      currentDist += distMatrix[route[i]][route[i + 1]];
-      routeDemand += locations[route[i + 1]].demand || 0;
+    let routeDemand = 0;
+    for (const cIdx of route) {
+      routeDemand += locations[cIdx].demand || 0;
     }
 
-    currentDist += distMatrix[route[route.length - 1]][depotIdx];
-    totalDistance += currentDist;
-
     if (routeDemand > vehicleCapacity) {
-      totalPenalty += (routeDemand - vehicleCapacity) * PENALTY_WEIGHT;
+      totalPenalty += (routeDemand - vehicleCapacity) * OVERLOAD_PENALTY;
     }
   }
 
@@ -59,7 +66,7 @@ function evaluateSolution(routes, distMatrix, depotIdx, locations, vehicleCapaci
   };
 }
 
-// Mengubah urutan permutasi menjadi rute-rute terpisah berdasarkan kapasitas kendaraan
+// Mengubah urutan permutasi menjadi rute terpisah berdasarkan kapasitas kendaraan (tanpa duplikasi)
 function decodeChromosome(permutation, locations, vehicleCapacity, numVehicles) {
   if (numVehicles <= 0) return [];
   const routes = [];
@@ -76,19 +83,22 @@ function decodeChromosome(permutation, locations, vehicleCapacity, numVehicles) 
       if (currentRoute.length > 0) {
         if (routes.length < numVehicles) {
           routes.push(currentRoute);
+          currentRoute = [customerIdx];
+          currentLoad = demand;
         } else {
           routes[routes.length - 1].push(customerIdx);
         }
+      } else {
+        currentRoute = [customerIdx];
+        currentLoad = demand;
       }
-      currentRoute = [customerIdx];
-      currentLoad = demand;
     }
   }
 
   if (currentRoute.length > 0) {
     if (routes.length < numVehicles) {
       routes.push(currentRoute);
-    } else if (routes.length > 0) {
+    } else {
       routes[routes.length - 1].push(...currentRoute);
     }
   }
@@ -106,7 +116,7 @@ function getRandomPermutation(customerIndices) {
   return arr;
 }
 
-// Operator Neighborhood VRP: Swap, Insertion (Relocate), dan 2-Opt
+// Operator Neighborhood acak untuk GA & ABC standar
 function mutateRouteNeighborhood(perm) {
   const arr = [...perm];
   const n = arr.length;
@@ -117,15 +127,12 @@ function mutateRouteNeighborhood(perm) {
   let j = Math.floor(Math.random() * (n - 1));
   if (j >= i) j++;
 
-  if (op < 0.33) {
-    // 1. Swap: Tukar dua titik pelanggan
+  if (op < 0.34) {
     [arr[i], arr[j]] = [arr[j], arr[i]];
-  } else if (op < 0.66) {
-    // 2. Insertion / Relocate: Pindahkan satu pelanggan ke posisi/rute lain
+  } else if (op < 0.67) {
     const [removed] = arr.splice(i, 1);
     arr.splice(j, 0, removed);
   } else {
-    // 3. 2-Opt: Balik sub-segmen rute untuk menghilangkan jalur bersilangan
     const start = Math.min(i, j);
     const end = Math.max(i, j);
     const reversedSegment = arr.slice(start, end + 1).reverse();
@@ -133,6 +140,165 @@ function mutateRouteNeighborhood(perm) {
   }
 
   return arr;
+}
+
+// --- LOCAL SEARCH EKSPLOITASI KHUSUS MEMETIC HYBRID ---
+
+// 1. Intra-Route 2-Opt: Meluruskan jalur bersilangan di dalam masing-masing rute armada
+function applyIntraRoute2Opt(routes, distMatrix, depotIdx) {
+  return routes.map((route) => {
+    if (route.length < 3) return [...route];
+    let bestRoute = [...route];
+    let bestDist = getSingleRouteDistance(bestRoute, distMatrix, depotIdx);
+    let improved = true;
+
+    while (improved) {
+      improved = false;
+      for (let i = 0; i < bestRoute.length - 1; i++) {
+        for (let k = i + 1; k < bestRoute.length; k++) {
+          const candidate = [
+            ...bestRoute.slice(0, i),
+            ...bestRoute.slice(i, k + 1).reverse(),
+            ...bestRoute.slice(k + 1),
+          ];
+          const candDist = getSingleRouteDistance(candidate, distMatrix, depotIdx);
+          if (candDist + 1e-6 < bestDist) {
+            bestRoute = candidate;
+            bestDist = candDist;
+            improved = true;
+          }
+        }
+      }
+    }
+    return bestRoute;
+  });
+}
+
+// 2. Inter-Route Relocate (1-0) + Inter-Route Swap (1-1)
+function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, capacity) {
+  let currentRoutes = routes.map((r) => [...r]).filter((r) => r.length > 0);
+  let improved = true;
+
+  while (improved) {
+    improved = false;
+    const loads = currentRoutes.map((r) =>
+      r.reduce((sum, idx) => sum + (locations[idx].demand || 0), 0)
+    );
+
+    // A. Inter-Route Relocate (1-0): Pindahkan 1 pelanggan ke rute lain yang masih muat
+    for (let rFrom = 0; rFrom < currentRoutes.length; rFrom++) {
+      for (let posFrom = 0; posFrom < currentRoutes[rFrom].length; posFrom++) {
+        const customer = currentRoutes[rFrom][posFrom];
+        const custDemand = locations[customer].demand || 0;
+
+        for (let rTo = 0; rTo < currentRoutes.length; rTo++) {
+          if (rFrom === rTo || loads[rTo] + custDemand > capacity) continue;
+
+          const oldDist =
+            getSingleRouteDistance(currentRoutes[rFrom], distMatrix, depotIdx) +
+            getSingleRouteDistance(currentRoutes[rTo], distMatrix, depotIdx);
+
+          const newFrom = currentRoutes[rFrom].filter((_, idx) => idx !== posFrom);
+          const newFromDist = getSingleRouteDistance(newFrom, distMatrix, depotIdx);
+
+          let bestInsertPos = -1;
+          let bestNewDist = oldDist;
+
+          for (let posTo = 0; posTo <= currentRoutes[rTo].length; posTo++) {
+            const candidateTo = [
+              ...currentRoutes[rTo].slice(0, posTo),
+              customer,
+              ...currentRoutes[rTo].slice(posTo),
+            ];
+            const totalNewDist =
+              newFromDist + getSingleRouteDistance(candidateTo, distMatrix, depotIdx);
+
+            if (totalNewDist + 1e-6 < bestNewDist) {
+              bestNewDist = totalNewDist;
+              bestInsertPos = posTo;
+            }
+          }
+
+          if (bestInsertPos !== -1) {
+            currentRoutes[rFrom] = newFrom;
+            currentRoutes[rTo].splice(bestInsertPos, 0, customer);
+            currentRoutes = currentRoutes.filter((r) => r.length > 0);
+            improved = true;
+            break;
+          }
+        }
+        if (improved) break;
+      }
+      if (improved) break;
+    }
+
+    if (improved) continue;
+
+    // B. Inter-Route Swap (1-1): Tukar 2 pelanggan antar rute yang sudah penuh
+    for (let r1 = 0; r1 < currentRoutes.length; r1++) {
+      for (let p1 = 0; p1 < currentRoutes[r1].length; p1++) {
+        const c1 = currentRoutes[r1][p1];
+        const d1 = locations[c1].demand || 0;
+
+        for (let r2 = r1 + 1; r2 < currentRoutes.length; r2++) {
+          for (let p2 = 0; p2 < currentRoutes[r2].length; p2++) {
+            const c2 = currentRoutes[r2][p2];
+            const d2 = locations[c2].demand || 0;
+
+            if (loads[r1] - d1 + d2 > capacity || loads[r2] - d2 + d1 > capacity) {
+              continue;
+            }
+
+            const oldDist =
+              getSingleRouteDistance(currentRoutes[r1], distMatrix, depotIdx) +
+              getSingleRouteDistance(currentRoutes[r2], distMatrix, depotIdx);
+
+            const rem1 = currentRoutes[r1].filter((_, idx) => idx !== p1);
+            const rem2 = currentRoutes[r2].filter((_, idx) => idx !== p2);
+
+            let bestCand1 = null;
+            let bestDist1 = Infinity;
+            for (let ins1 = 0; ins1 <= rem1.length; ins1++) {
+              const cand1 = [...rem1.slice(0, ins1), c2, ...rem1.slice(ins1)];
+              const dist1 = getSingleRouteDistance(cand1, distMatrix, depotIdx);
+              if (dist1 < bestDist1) {
+                bestDist1 = dist1;
+                bestCand1 = cand1;
+              }
+            }
+
+            let bestCand2 = null;
+            let bestDist2 = Infinity;
+            for (let ins2 = 0; ins2 <= rem2.length; ins2++) {
+              const cand2 = [...rem2.slice(0, ins2), c1, ...rem2.slice(ins2)];
+              const dist2 = getSingleRouteDistance(cand2, distMatrix, depotIdx);
+              if (dist2 < bestDist2) {
+                bestDist2 = dist2;
+                bestCand2 = cand2;
+              }
+            }
+
+            if (bestDist1 + bestDist2 + 1e-6 < oldDist) {
+              currentRoutes[r1] = bestCand1;
+              currentRoutes[r2] = bestCand2;
+              improved = true;
+              break;
+            }
+          }
+          if (improved) break;
+        }
+        if (improved) break;
+      }
+      if (improved) break;
+    }
+  }
+
+  return applyIntraRoute2Opt(currentRoutes, distMatrix, depotIdx);
+}
+
+// Gabungan Local Search (Relocate + 1-1 Swap + 2-Opt)
+function refineRoutesMemetic(routes, distMatrix, depotIdx, locations, capacity) {
+  return applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, capacity);
 }
 
 // --- ALGORITMA GENETIKA (GA) ---
@@ -164,7 +330,6 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
 
     evaluated.sort((a, b) => a.fit - b.fit);
 
-    // Elitisme (simpan 2 individu terbaik)
     const nextPop = [evaluated[0].perm];
     if (popSize > 1) nextPop.push(evaluated[1].perm);
 
@@ -173,7 +338,6 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
       const parent1 = evaluated[Math.floor(Math.random() * poolSize)].perm;
       const parent2 = evaluated[Math.floor(Math.random() * poolSize)].perm;
 
-      // Order Crossover (OX)
       const start = Math.floor(Math.random() * parent1.length);
       const end = start + Math.floor(Math.random() * (parent1.length - start));
       const child = Array(parent1.length).fill(-1);
@@ -187,7 +351,6 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
         }
       }
 
-      // Mutasi Neighborhood (probabilitas 20%)
       nextPop.push(Math.random() < 0.2 ? mutateRouteNeighborhood(child) : child);
     }
     population = nextPop;
@@ -208,7 +371,6 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
 function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedState = null) {
   const { generations, popSize, capacity, vehicles } = params;
 
-  // Gunakan populasi dari GA jika dipanggil dari mode HYBRID
   let foodSources = seedState?.population
     ? seedState.population.map((p) => [...p])
     : Array.from({ length: popSize }, () => getRandomPermutation(customerIndices));
@@ -251,7 +413,7 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
       }
     }
 
-    // 2. Onlooker Bees Phase (Roulette Wheel Selection berbasis kualitas fitness)
+    // 2. Onlooker Bees Phase
     const qualities = fitnessCache.map((e) => 1 / (1 + e.fitness));
     const totalQuality = qualities.reduce((sum, q) => sum + q, 0);
 
@@ -284,7 +446,7 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
       }
     }
 
-    // 3. Scout Bees Phase (Lindungi sumber makanan terbaik agar tidak di-reset)
+    // 3. Scout Bees Phase
     let bestSourceIdx = 0;
     for (let i = 1; i < popSize; i++) {
       if (fitnessCache[i].fitness < fitnessCache[bestSourceIdx].fitness) {
@@ -328,46 +490,126 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
   };
 }
 
-// --- HYBRID (GA -> ABC Sequential Refinement) ---
+// --- MEMETIC HYBRID (Full GA + ABC + Relocate/Swap/2-Opt) ---
 function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
-  const halfGen = Math.floor(params.generations / 2);
-  const remGen = params.generations - halfGen;
+  const { generations, popSize, capacity, vehicles } = params;
+  const abcGen = Math.max(10, Math.floor(generations * 0.4));
 
-  // Tahap 1: Eksplorasi global dengan GA
+  // Tahap 1: Eksplorasi global penuh dengan GA
   const gaResult = runGA(
     locations,
-    { ...params, generations: halfGen },
+    { ...params, generations },
     distMatrix,
     customerIndices,
     depotIdx
   );
 
-  // Tahap 2: Eksploitasi lokal melanjutkan populasi terbaik dari GA
+  // Poles solusi terbaik hasil GA dengan Relocate + 1-1 Swap + 2-Opt
+  const refinedGaRoutes = refineRoutesMemetic(
+    gaResult.bestRoutes,
+    distMatrix,
+    depotIdx,
+    locations,
+    capacity
+  );
+  const refinedGaEval = evaluateSolution(
+    refinedGaRoutes,
+    distMatrix,
+    depotIdx,
+    locations,
+    capacity
+  );
+
+  const rankedPop = gaResult.finalPopulation
+    .map((perm) => ({
+      perm,
+      fit: evaluateSolution(
+        decodeChromosome(perm, locations, capacity, vehicles),
+        distMatrix,
+        depotIdx,
+        locations,
+        capacity
+      ).fitness,
+    }))
+    .sort((a, b) => a.fit - b.fit)
+    .map((item) => item.perm);
+
+  const eliteCount = Math.min(5, popSize);
+  for (let i = 0; i < eliteCount; i++) {
+    const eliteRoutes = refineRoutesMemetic(
+      decodeChromosome(rankedPop[i], locations, capacity, vehicles),
+      distMatrix,
+      depotIdx,
+      locations,
+      capacity
+    );
+    rankedPop[i] = eliteRoutes.flat();
+  }
+
+  // Tahap 2: Eksploitasi lokal lanjutan dengan ABC pada populasi elite
   const abcResult = runABC(
     locations,
-    { ...params, generations: remGen },
+    { ...params, generations: abcGen },
     distMatrix,
     customerIndices,
     depotIdx,
     {
-      population: gaResult.finalPopulation,
-      bestPerm: gaResult.bestPerm,
-      bestEval: gaResult.bestEval,
+      population: rankedPop,
+      bestPerm: refinedGaRoutes.flat(),
+      bestEval: refinedGaEval,
     }
   );
+
+  // Pemolesan akhir (Final Polishing) pada rute terbaik ABC
+  const polishedAbcRoutes = refineRoutesMemetic(
+    abcResult.bestRoutes,
+    distMatrix,
+    depotIdx,
+    locations,
+    capacity
+  );
+  const polishedAbcEval = evaluateSolution(
+    polishedAbcRoutes,
+    distMatrix,
+    depotIdx,
+    locations,
+    capacity
+  );
+
+  // Pilih solusi terbaik mutlak dari seluruh tahapan Hybrid
+  const candidates = [
+    { routes: gaResult.bestRoutes, evalRes: gaResult.bestEval },
+    { routes: refinedGaRoutes, evalRes: refinedGaEval },
+    {
+      routes: abcResult.bestRoutes,
+      evalRes: evaluateSolution(
+        abcResult.bestRoutes,
+        distMatrix,
+        depotIdx,
+        locations,
+        capacity
+      ),
+    },
+    { routes: polishedAbcRoutes, evalRes: polishedAbcEval },
+  ].sort((a, b) => a.evalRes.fitness - b.evalRes.fitness);
+
+  const winner = candidates[0];
 
   const history = [
     ...gaResult.history,
     ...abcResult.history.map((h, i) => ({
-      generation: halfGen + i + 1,
-      fitness: h.fitness,
+      generation: generations + i + 1,
+      fitness:
+        i === abcResult.history.length - 1
+          ? Number(winner.evalRes.distance.toFixed(2))
+          : Math.min(h.fitness, Number(refinedGaEval.distance.toFixed(2))),
     })),
   ];
 
   return {
-    bestRoutes: abcResult.bestRoutes,
-    bestDistance: abcResult.bestDistance,
-    isFeasible: abcResult.isFeasible,
+    bestRoutes: winner.routes,
+    bestDistance: winner.evalRes.distance,
+    isFeasible: winner.evalRes.isFeasible,
     history,
   };
 }
