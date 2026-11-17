@@ -62,7 +62,6 @@ const defaultLocations = [
   },
 ];
 
-// Warna sinkron dengan garis rute di MapView.jsx
 const routeColors = [
   "#E63946",
   "#2A9D8F",
@@ -86,6 +85,7 @@ export default function App() {
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showTradeOff, setShowTradeOff] = useState(false);
+  const [benchmarkView, setBenchmarkView] = useState("table"); // 'table' | 'chart'
   const [isRouteOutdated, setIsRouteOutdated] = useState(false);
   const [mobileTab, setMobileTab] = useState("result"); // 'result' | 'locations' | 'params'
 
@@ -113,6 +113,16 @@ export default function App() {
     setIsRouteOutdated(true);
   };
 
+  const updateParams = (newParams) => {
+    setParams(newParams);
+    setIsRouteOutdated(true);
+  };
+
+  const handleAlgorithmChange = (newAlg) => {
+    setAlgorithm(newAlg);
+    setIsRouteOutdated(true);
+  };
+
   const handleRunOptimization = () => {
     const hasDepot = locations.some((l) => l.isDepot);
     const customerCount = locations.filter((l) => !l.isDepot).length;
@@ -127,12 +137,15 @@ export default function App() {
       params.generations <= 0 ||
       params.popSize < 2
     ) {
-      alert("Parameter Kapasitas, Armada, Generasi (>=1), dan PopSize (>=2) harus valid.");
+      alert(
+        "Parameter Kapasitas, Armada, Generasi (>=1), dan PopSize (>=2) harus valid.",
+      );
       return;
     }
 
     setIsRouteOutdated(false);
     setShowTradeOff(false);
+    setBenchmarkView("table");
     setMobileTab("result");
     runSolver(algorithm, locations, params);
   };
@@ -183,7 +196,7 @@ export default function App() {
         ...loc,
         isDepot: loc.id === id,
         demand: loc.id === id ? 0 : loc.demand > 0 ? loc.demand : 10,
-      }))
+      })),
     );
   };
 
@@ -224,47 +237,78 @@ export default function App() {
         if (file.name.endsWith(".json")) {
           const raw = JSON.parse(event.target.result);
           if (!Array.isArray(raw)) throw new Error("Format JSON harus array");
-          parsed = raw.map((item, idx) => ({
-            id: item.id || `json-${idx}-${Date.now()}`,
-            name: String(item.name || `Loc ${idx + 1}`),
-            lat: parseFloat(item.lat),
-            lng: parseFloat(item.lng),
-            demand: item.isDepot ? 0 : parseInt(item.demand, 10) || 0,
-            isDepot: Boolean(item.isDepot),
-          }));
+          raw.forEach((item, idx) => {
+            const lat = parseFloat(item.lat);
+            const lng = parseFloat(item.lng);
+            if (!isNaN(lat) && !isNaN(lng)) {
+              const depotFlag = Boolean(item.isDepot);
+              parsed.push({
+                id: item.id || `json-${idx}-${Date.now()}`,
+                name: String(item.name || `Loc ${idx + 1}`),
+                lat,
+                lng,
+                demand: depotFlag
+                  ? 0
+                  : Math.max(0, parseInt(item.demand, 10) || 0),
+                isDepot: depotFlag,
+              });
+            }
+          });
         } else if (file.name.endsWith(".csv")) {
           const lines = event.target.result
             .split(/\r?\n/)
             .filter((l) => l.trim());
           lines.slice(1).forEach((line, idx) => {
-            const [name, lat, lng, demand, isDepot] = line.split(",");
-            if (
-              lat &&
-              lng &&
-              !isNaN(parseFloat(lat)) &&
-              !isNaN(parseFloat(lng))
-            ) {
-              const depotFlag = (isDepot || "").trim().toLowerCase() === "true";
-              parsed.push({
-                id: `csv-${idx}-${Date.now()}`,
-                name: (name || "").trim() || `Loc ${idx + 1}`,
-                lat: parseFloat(lat),
-                lng: parseFloat(lng),
-                demand: depotFlag ? 0 : parseInt(demand, 10) || 0,
-                isDepot: depotFlag,
-              });
+            const parts = line.split(",");
+            if (parts.length >= 3) {
+              const isDepotRaw = parts[parts.length - 1];
+              const demandRaw = parts[parts.length - 2];
+              const lngRaw = parts[parts.length - 3];
+              const latRaw = parts[parts.length - 4];
+              const nameRaw = parts.slice(0, parts.length - 4).join(",");
+
+              const lat = parseFloat(latRaw);
+              const lng = parseFloat(lngRaw);
+              if (!isNaN(lat) && !isNaN(lng)) {
+                const depotFlag =
+                  (isDepotRaw || "").trim().toLowerCase() === "true";
+                parsed.push({
+                  id: `csv-${idx}-${Date.now()}`,
+                  name:
+                    (nameRaw || "").trim().replace(/^"|"$/g, "") ||
+                    `Loc ${idx + 1}`,
+                  lat,
+                  lng,
+                  demand: depotFlag
+                    ? 0
+                    : Math.max(0, parseInt(demandRaw, 10) || 0),
+                  isDepot: depotFlag,
+                });
+              }
             }
           });
         }
 
         if (parsed.length === 0) {
-          alert("Dataset kosong atau tidak terbaca.");
+          alert("Dataset kosong atau koordinat tidak valid.");
           return;
         }
-        if (!parsed.some((p) => p.isDepot)) {
+
+        // Pastikan hanya ada tepat 1 depot
+        let depotAssigned = false;
+        parsed = parsed.map((item) => {
+          if (item.isDepot && !depotAssigned) {
+            depotAssigned = true;
+            return { ...item, demand: 0 };
+          }
+          return { ...item, isDepot: false };
+        });
+
+        if (!depotAssigned) {
           parsed[0].isDepot = true;
           parsed[0].demand = 0;
         }
+
         updateLocations(parsed);
       } catch (err) {
         alert("Format file tidak valid! Pastikan struktur CSV/JSON sesuai.");
@@ -277,8 +321,10 @@ export default function App() {
 
   const handleExportResult = () => {
     if (!activeResult) return;
+    const usedAlg =
+      activeResult.winnerAlgorithm || activeResult.algorithm || algorithm;
     const payload = {
-      algorithm,
+      algorithm: usedAlg,
       params,
       totalDistanceKm: Number(activeResult.bestDistance.toFixed(2)),
       executionTimeMs: activeResult.executionTime || activeResult.time,
@@ -297,7 +343,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `vrp-result-${algorithm.toLowerCase()}-${Date.now()}.json`;
+    a.download = `vrp-result-${usedAlg.toLowerCase()}-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -349,7 +395,6 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* Badge Kapasitas Total */}
           <div
             className={`hidden md:flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg border ${
               isCapacityEnough
@@ -401,7 +446,6 @@ export default function App() {
             </span>
           </button>
 
-          {/* Tombol Optimasi Utama (Desktop) */}
           <button
             onClick={handleRunOptimization}
             disabled={isCalculating}
@@ -500,7 +544,11 @@ export default function App() {
                       } text-sm`}
                     ></i>
                     <span>
-                      {showTradeOff ? "Analisis Trade-Off" : "Hasil Optimasi"}
+                      {showTradeOff
+                        ? "Analisis Trade-Off"
+                        : activeResult?.winnerAlgorithm
+                          ? `Terbaik (${activeResult.winnerAlgorithm})`
+                          : "Hasil Optimasi"}
                     </span>
                   </h3>
                   <button
@@ -608,11 +656,10 @@ export default function App() {
                       {activeResult.bestRoutes.map((r, i) => {
                         const routeLoad = r.reduce(
                           (sum, cIdx) => sum + (locations[cIdx]?.demand || 0),
-                          0
+                          0,
                         );
                         const isOverload = routeLoad > params.capacity;
-                        const badgeColor =
-                          routeColors[i % routeColors.length];
+                        const badgeColor = routeColors[i % routeColors.length];
 
                         return (
                           <div
@@ -659,9 +706,11 @@ export default function App() {
                   <div className="flex-1 flex flex-col items-center justify-center text-center text-xs opacity-60 italic py-4 px-2 gap-1">
                     <i className="ti ti-info-circle text-lg"></i>
                     <span>
-                      {isRouteOutdated
-                        ? "Data lokasi diperbarui. Jalankan optimasi untuk menghitung rute baru."
-                        : "Tekan 'Jalankan Optimasi' untuk memulai pencarian rute terbaik."}
+                      {isCalculating
+                        ? "Menghitung rute optimal..."
+                        : isRouteOutdated
+                          ? "Data atau parameter berubah. Jalankan optimasi untuk hasil terbaru."
+                          : "Tekan 'Jalankan Optimasi' untuk memulai pencarian rute terbaik."}
                     </span>
                   </div>
                 )}
@@ -669,63 +718,116 @@ export default function App() {
             </div>
 
             {/* Grafik Konvergensi / Tabel Benchmark */}
-            <div className="w-full md:w-7/12 h-44 md:h-full flex flex-col min-h-0 overflow-hidden">
+            <div className="w-full md:w-7/12 h-48 md:h-full flex flex-col min-h-0 overflow-hidden">
               {activeBenchmark ? (
                 <div className="h-full flex flex-col min-h-0">
-                  <h3 className="text-xs font-bold uppercase tracking-wider mb-1.5 opacity-80 flex items-center gap-1.5">
-                    <i className="ti ti-flame text-orange-500 text-sm"></i>
-                    <span>Perbandingan Benchmark</span>
-                  </h3>
-                  <div className="flex-1 overflow-x-auto overflow-y-auto text-xs">
-                    <table className="w-full text-left min-w-[340px]">
-                      <thead
-                        className={`text-[10px] uppercase sticky top-0 ${
-                          isDarkMode
-                            ? "bg-slate-900 text-slate-400"
-                            : "bg-slate-100 text-slate-600"
+                  <div className="flex items-center justify-between mb-1.5 shrink-0">
+                    <h3 className="text-xs font-bold uppercase tracking-wider opacity-80 flex items-center gap-1.5">
+                      <i className="ti ti-flame text-orange-500 text-sm"></i>
+                      <span>Perbandingan Benchmark</span>
+                    </h3>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setBenchmarkView("table")}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer transition ${
+                          benchmarkView === "table"
+                            ? "bg-indigo-600 text-white"
+                            : isDarkMode
+                              ? "bg-slate-700 text-slate-300"
+                              : "bg-slate-100 text-slate-600"
                         }`}
                       >
-                        <tr>
-                          <th className="p-1.5">Algoritma</th>
-                          <th className="p-1.5">Total Jarak</th>
-                          <th className="p-1.5">Waktu</th>
-                          <th className="p-1.5">Armada</th>
-                          <th className="p-1.5">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody
-                        className={`divide-y text-[11px] ${
-                          isDarkMode ? "divide-slate-700" : "divide-slate-200"
+                        Tabel
+                      </button>
+                      <button
+                        onClick={() => setBenchmarkView("chart")}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md cursor-pointer transition ${
+                          benchmarkView === "chart"
+                            ? "bg-indigo-600 text-white"
+                            : isDarkMode
+                              ? "bg-slate-700 text-slate-300"
+                              : "bg-slate-100 text-slate-600"
                         }`}
                       >
-                        {Object.entries(activeBenchmark).map(([alg, d]) => (
-                          <tr key={alg}>
-                            <td className="p-1.5 font-extrabold text-indigo-500">
-                              {alg}
-                            </td>
-                            <td className="p-1.5 font-bold">
-                              {d.bestDistance.toFixed(2)} km
-                            </td>
-                            <td className="p-1.5">{d.time} ms</td>
-                            <td className="p-1.5">
-                              {d.bestRoutes.length} Unit
-                            </td>
-                            <td className="p-1.5">
-                              {d.isFeasible === false ? (
-                                <span className="text-rose-500 font-bold inline-flex items-center gap-0.5">
-                                  <i className="ti ti-x text-xs"></i> Overload
-                                </span>
-                              ) : (
-                                <span className="text-emerald-500 font-bold inline-flex items-center gap-0.5">
-                                  <i className="ti ti-check text-xs"></i> Valid
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        Kurva
+                      </button>
+                    </div>
                   </div>
+
+                  {benchmarkView === "table" ? (
+                    <div className="flex-1 overflow-x-auto overflow-y-auto text-xs">
+                      <table className="w-full text-left min-w-[340px]">
+                        <thead
+                          className={`text-[10px] uppercase sticky top-0 ${
+                            isDarkMode
+                              ? "bg-slate-900 text-slate-400"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          <tr>
+                            <th className="p-1.5">Algoritma</th>
+                            <th className="p-1.5">Total Jarak</th>
+                            <th className="p-1.5">Waktu</th>
+                            <th className="p-1.5">Armada</th>
+                            <th className="p-1.5">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody
+                          className={`divide-y text-[11px] ${
+                            isDarkMode ? "divide-slate-700" : "divide-slate-200"
+                          }`}
+                        >
+                          {Object.entries(activeBenchmark).map(([alg, d]) => {
+                            const isWinner =
+                              activeResult?.winnerAlgorithm === alg;
+                            return (
+                              <tr
+                                key={alg}
+                                className={
+                                  isWinner
+                                    ? isDarkMode
+                                      ? "bg-indigo-950/40"
+                                      : "bg-indigo-50/70"
+                                    : ""
+                                }
+                              >
+                                <td className="p-1.5 font-extrabold text-indigo-500">
+                                  {alg} {isWinner && "★"}
+                                </td>
+                                <td className="p-1.5 font-bold">
+                                  {d.bestDistance.toFixed(2)} km
+                                </td>
+                                <td className="p-1.5">{d.time} ms</td>
+                                <td className="p-1.5">
+                                  {d.bestRoutes.length} Unit
+                                </td>
+                                <td className="p-1.5">
+                                  {d.isFeasible === false ? (
+                                    <span className="text-rose-500 font-bold inline-flex items-center gap-0.5">
+                                      <i className="ti ti-x text-xs"></i>{" "}
+                                      Overload
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-500 font-bold inline-flex items-center gap-0.5">
+                                      <i className="ti ti-check text-xs"></i>{" "}
+                                      Valid
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-h-0 w-full">
+                      <FitnessChart
+                        benchmarkData={activeBenchmark}
+                        isDarkMode={isDarkMode}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="h-full flex flex-col min-h-0">
@@ -777,7 +879,7 @@ export default function App() {
             <div className="space-y-2 text-xs">
               <select
                 value={algorithm}
-                onChange={(e) => setAlgorithm(e.target.value)}
+                onChange={(e) => handleAlgorithmChange(e.target.value)}
                 className={`w-full p-2 lg:p-1.5 border rounded-lg font-bold text-xs ${
                   isDarkMode
                     ? "bg-slate-900 border-slate-700 text-indigo-300"
@@ -792,25 +894,39 @@ export default function App() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
                 {[
-                  { key: "capacity", label: "Kapasitas" },
-                  { key: "vehicles", label: "Armada" },
-                  { key: "generations", label: "Generasi" },
-                  { key: "popSize", label: "Populasi" },
-                ].map(({ key, label }) => (
+                  { key: "capacity", label: "Kapasitas", minVal: 1 },
+                  { key: "vehicles", label: "Armada", minVal: 1 },
+                  { key: "generations", label: "Generasi", minVal: 1 },
+                  { key: "popSize", label: "Populasi", minVal: 2 },
+                ].map(({ key, label, minVal }) => (
                   <div key={key}>
                     <label className="opacity-70 block truncate mb-0.5 font-medium">
                       {label}
                     </label>
                     <input
                       type="number"
-                      min={key === "popSize" ? 2 : 1}
+                      min={minVal}
                       value={params[key]}
-                      onChange={(e) =>
-                        setParams({
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        updateParams({
                           ...params,
-                          [key]: parseInt(e.target.value, 10) || 0,
-                        })
-                      }
+                          [key]:
+                            raw === ""
+                              ? ""
+                              : Math.max(0, parseInt(raw, 10) || 0),
+                        });
+                      }}
+                      onBlur={() => {
+                        const num = parseInt(params[key], 10);
+                        if (isNaN(num) || num < minVal) {
+                          updateParams({
+                            ...params,
+                            [key]: minVal,
+                          });
+                        }
+                      }}
                       className={`w-full p-2 lg:p-1 border rounded-lg text-center font-bold text-xs ${inputSurface}`}
                     />
                   </div>
@@ -1022,7 +1138,7 @@ export default function App() {
                         onClick={(e) => {
                           e.stopPropagation();
                           updateLocations(
-                            locations.filter((l) => l.id !== loc.id)
+                            locations.filter((l) => l.id !== loc.id),
                           );
                         }}
                         className="text-rose-500 hover:bg-rose-500/10 rounded-md p-1.5 lg:p-1 transition cursor-pointer"

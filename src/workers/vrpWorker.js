@@ -39,7 +39,13 @@ function getSingleRouteDistance(route, distMatrix, depotIdx) {
 }
 
 // Evaluasi total jarak (km) + penalti overload
-function evaluateSolution(routes, distMatrix, depotIdx, locations, vehicleCapacity) {
+function evaluateSolution(
+  routes,
+  distMatrix,
+  depotIdx,
+  locations,
+  vehicleCapacity,
+) {
   let totalDistance = 0;
   let totalPenalty = 0;
   const OVERLOAD_PENALTY = 1000;
@@ -66,44 +72,81 @@ function evaluateSolution(routes, distMatrix, depotIdx, locations, vehicleCapaci
   };
 }
 
-// Mengubah urutan permutasi menjadi rute terpisah berdasarkan kapasitas kendaraan (tanpa duplikasi)
-function decodeChromosome(permutation, locations, vehicleCapacity, numVehicles) {
-  if (numVehicles <= 0) return [];
-  const routes = [];
-  let currentRoute = [];
-  let currentLoad = 0;
+// Algoritma Split Prins (Dynamic Programming) untuk memotong Giant Tour secara optimal
+function decodeChromosome(
+  permutation,
+  locations,
+  vehicleCapacity,
+  numVehicles,
+  distMatrix,
+  depotIdx,
+) {
+  const m = permutation.length;
+  if (numVehicles <= 0 || m === 0) return [];
 
-  for (const customerIdx of permutation) {
-    const demand = locations[customerIdx].demand || 0;
-
-    if (currentLoad + demand <= vehicleCapacity) {
-      currentRoute.push(customerIdx);
-      currentLoad += demand;
-    } else {
-      if (currentRoute.length > 0) {
-        if (routes.length < numVehicles) {
-          routes.push(currentRoute);
-          currentRoute = [customerIdx];
-          currentLoad = demand;
-        } else {
-          routes[routes.length - 1].push(customerIdx);
-        }
+  // Precompute biaya perjalanan untuk setiap segmen [i..j]
+  const segCost = Array.from({ length: m }, () => Array(m).fill(Infinity));
+  for (let i = 0; i < m; i++) {
+    let load = 0;
+    let dist = 0;
+    for (let j = i; j < m; j++) {
+      const cust = permutation[j];
+      load += locations[cust].demand || 0;
+      if (j === i) {
+        dist = distMatrix[depotIdx][cust];
       } else {
-        currentRoute = [customerIdx];
-        currentLoad = demand;
+        dist += distMatrix[permutation[j - 1]][cust];
+      }
+      const totalTripDist = dist + distMatrix[cust][depotIdx];
+      const penalty =
+        load > vehicleCapacity ? (load - vehicleCapacity) * 1000 : 0;
+      segCost[i][j] = totalTripDist + penalty;
+    }
+  }
+
+  // DP: dp[k][j] = biaya minimum membagi j pelanggan pertama ke dalam k armada
+  const dp = Array.from({ length: numVehicles + 1 }, () =>
+    Array(m + 1).fill(Infinity),
+  );
+  const parent = Array.from({ length: numVehicles + 1 }, () =>
+    Array(m + 1).fill(-1),
+  );
+  dp[0][0] = 0;
+
+  for (let k = 1; k <= numVehicles; k++) {
+    for (let j = 1; j <= m; j++) {
+      for (let i = k - 1; i < j; i++) {
+        if (dp[k - 1][i] === Infinity) continue;
+        const cost = dp[k - 1][i] + segCost[i][j - 1];
+        if (cost < dp[k][j]) {
+          dp[k][j] = cost;
+          parent[k][j] = i;
+        }
       }
     }
   }
 
-  if (currentRoute.length > 0) {
-    if (routes.length < numVehicles) {
-      routes.push(currentRoute);
-    } else {
-      routes[routes.length - 1].push(...currentRoute);
+  // Pilih jumlah armada k terbaik (1..numVehicles) yang mencakup seluruh m pelanggan
+  let bestK = numVehicles;
+  let bestTotal = Infinity;
+  for (let k = 1; k <= numVehicles; k++) {
+    if (dp[k][m] < bestTotal) {
+      bestTotal = dp[k][m];
+      bestK = k;
     }
   }
 
-  return routes;
+  // Rekonstruksi rute dari tabel parent
+  const routes = [];
+  let currJ = m;
+  for (let k = bestK; k >= 1; k--) {
+    const prevI = parent[k][currJ];
+    if (prevI === -1) break;
+    routes.unshift(permutation.slice(prevI, currJ));
+    currJ = prevI;
+  }
+
+  return routes.length > 0 ? routes : [permutation];
 }
 
 // Generate permutasi acak (Fisher-Yates Shuffle)
@@ -116,7 +159,7 @@ function getRandomPermutation(customerIndices) {
   return arr;
 }
 
-// Operator Neighborhood acak untuk GA & ABC standar
+// Operator Neighborhood acak untuk GA & ABC
 function mutateRouteNeighborhood(perm) {
   const arr = [...perm];
   const n = arr.length;
@@ -161,7 +204,11 @@ function applyIntraRoute2Opt(routes, distMatrix, depotIdx) {
             ...bestRoute.slice(i, k + 1).reverse(),
             ...bestRoute.slice(k + 1),
           ];
-          const candDist = getSingleRouteDistance(candidate, distMatrix, depotIdx);
+          const candDist = getSingleRouteDistance(
+            candidate,
+            distMatrix,
+            depotIdx,
+          );
           if (candDist + 1e-6 < bestDist) {
             bestRoute = candidate;
             bestDist = candDist;
@@ -175,17 +222,23 @@ function applyIntraRoute2Opt(routes, distMatrix, depotIdx) {
 }
 
 // 2. Inter-Route Relocate (1-0) + Inter-Route Swap (1-1)
-function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, capacity) {
+function applyInterRouteOptimization(
+  routes,
+  distMatrix,
+  depotIdx,
+  locations,
+  capacity,
+) {
   let currentRoutes = routes.map((r) => [...r]).filter((r) => r.length > 0);
   let improved = true;
 
   while (improved) {
     improved = false;
     const loads = currentRoutes.map((r) =>
-      r.reduce((sum, idx) => sum + (locations[idx].demand || 0), 0)
+      r.reduce((sum, idx) => sum + (locations[idx].demand || 0), 0),
     );
 
-    // A. Inter-Route Relocate (1-0): Pindahkan 1 pelanggan ke rute lain yang masih muat
+    // A. Inter-Route Relocate (1-0)
     for (let rFrom = 0; rFrom < currentRoutes.length; rFrom++) {
       for (let posFrom = 0; posFrom < currentRoutes[rFrom].length; posFrom++) {
         const customer = currentRoutes[rFrom][posFrom];
@@ -198,8 +251,14 @@ function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, ca
             getSingleRouteDistance(currentRoutes[rFrom], distMatrix, depotIdx) +
             getSingleRouteDistance(currentRoutes[rTo], distMatrix, depotIdx);
 
-          const newFrom = currentRoutes[rFrom].filter((_, idx) => idx !== posFrom);
-          const newFromDist = getSingleRouteDistance(newFrom, distMatrix, depotIdx);
+          const newFrom = currentRoutes[rFrom].filter(
+            (_, idx) => idx !== posFrom,
+          );
+          const newFromDist = getSingleRouteDistance(
+            newFrom,
+            distMatrix,
+            depotIdx,
+          );
 
           let bestInsertPos = -1;
           let bestNewDist = oldDist;
@@ -211,7 +270,8 @@ function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, ca
               ...currentRoutes[rTo].slice(posTo),
             ];
             const totalNewDist =
-              newFromDist + getSingleRouteDistance(candidateTo, distMatrix, depotIdx);
+              newFromDist +
+              getSingleRouteDistance(candidateTo, distMatrix, depotIdx);
 
             if (totalNewDist + 1e-6 < bestNewDist) {
               bestNewDist = totalNewDist;
@@ -234,7 +294,7 @@ function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, ca
 
     if (improved) continue;
 
-    // B. Inter-Route Swap (1-1): Tukar 2 pelanggan antar rute yang sudah penuh
+    // B. Inter-Route Swap (1-1)
     for (let r1 = 0; r1 < currentRoutes.length; r1++) {
       for (let p1 = 0; p1 < currentRoutes[r1].length; p1++) {
         const c1 = currentRoutes[r1][p1];
@@ -245,7 +305,10 @@ function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, ca
             const c2 = currentRoutes[r2][p2];
             const d2 = locations[c2].demand || 0;
 
-            if (loads[r1] - d1 + d2 > capacity || loads[r2] - d2 + d1 > capacity) {
+            if (
+              loads[r1] - d1 + d2 > capacity ||
+              loads[r2] - d2 + d1 > capacity
+            ) {
               continue;
             }
 
@@ -296,16 +359,27 @@ function applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, ca
   return applyIntraRoute2Opt(currentRoutes, distMatrix, depotIdx);
 }
 
-// Gabungan Local Search (Relocate + 1-1 Swap + 2-Opt)
-function refineRoutesMemetic(routes, distMatrix, depotIdx, locations, capacity) {
-  return applyInterRouteOptimization(routes, distMatrix, depotIdx, locations, capacity);
+function refineRoutesMemetic(
+  routes,
+  distMatrix,
+  depotIdx,
+  locations,
+  capacity,
+) {
+  return applyInterRouteOptimization(
+    routes,
+    distMatrix,
+    depotIdx,
+    locations,
+    capacity,
+  );
 }
 
 // --- ALGORITMA GENETIKA (GA) ---
 function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
   const { generations, popSize, capacity, vehicles } = params;
   let population = Array.from({ length: popSize }, () =>
-    getRandomPermutation(customerIndices)
+    getRandomPermutation(customerIndices),
   );
 
   let bestPerm = [...population[0]];
@@ -314,8 +388,21 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
 
   for (let gen = 0; gen < generations; gen++) {
     const evaluated = population.map((perm) => {
-      const routes = decodeChromosome(perm, locations, capacity, vehicles);
-      const evalRes = evaluateSolution(routes, distMatrix, depotIdx, locations, capacity);
+      const routes = decodeChromosome(
+        perm,
+        locations,
+        capacity,
+        vehicles,
+        distMatrix,
+        depotIdx,
+      );
+      const evalRes = evaluateSolution(
+        routes,
+        distMatrix,
+        depotIdx,
+        locations,
+        capacity,
+      );
       if (evalRes.fitness < bestEval.fitness) {
         bestEval = evalRes;
         bestPerm = [...perm];
@@ -351,13 +438,22 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
         }
       }
 
-      nextPop.push(Math.random() < 0.2 ? mutateRouteNeighborhood(child) : child);
+      nextPop.push(
+        Math.random() < 0.2 ? mutateRouteNeighborhood(child) : child,
+      );
     }
     population = nextPop;
   }
 
   return {
-    bestRoutes: decodeChromosome(bestPerm, locations, capacity, vehicles),
+    bestRoutes: decodeChromosome(
+      bestPerm,
+      locations,
+      capacity,
+      vehicles,
+      distMatrix,
+      depotIdx,
+    ),
     bestDistance: bestEval.distance,
     isFeasible: bestEval.isFeasible,
     history,
@@ -368,28 +464,48 @@ function runGA(locations, params, distMatrix, customerIndices, depotIdx) {
 }
 
 // --- ALGORITMA ARTIFICIAL BEE COLONY (ABC) ---
-function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedState = null) {
+function runABC(
+  locations,
+  params,
+  distMatrix,
+  customerIndices,
+  depotIdx,
+  seedState = null,
+) {
   const { generations, popSize, capacity, vehicles } = params;
 
   let foodSources = seedState?.population
     ? seedState.population.map((p) => [...p])
-    : Array.from({ length: popSize }, () => getRandomPermutation(customerIndices));
+    : Array.from({ length: popSize }, () =>
+        getRandomPermutation(customerIndices),
+      );
 
   let fitnessCache = foodSources.map((perm) =>
     evaluateSolution(
-      decodeChromosome(perm, locations, capacity, vehicles),
+      decodeChromosome(
+        perm,
+        locations,
+        capacity,
+        vehicles,
+        distMatrix,
+        depotIdx,
+      ),
       distMatrix,
       depotIdx,
       locations,
-      capacity
-    )
+      capacity,
+    ),
   );
 
   let trialLimits = Array(popSize).fill(0);
   const maxTrials = 15;
 
-  let bestPerm = seedState?.bestPerm ? [...seedState.bestPerm] : [...foodSources[0]];
-  let bestEval = seedState?.bestEval || { ...fitnessCache[0] };
+  let bestPerm = seedState?.bestPerm
+    ? [...seedState.bestPerm]
+    : [...foodSources[0]];
+  let bestEval = seedState?.bestEval
+    ? { ...seedState.bestEval }
+    : { ...fitnessCache[0] };
   const history = [];
 
   for (let gen = 0; gen < generations; gen++) {
@@ -397,11 +513,18 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
     for (let i = 0; i < popSize; i++) {
       const newPerm = mutateRouteNeighborhood(foodSources[i]);
       const newEval = evaluateSolution(
-        decodeChromosome(newPerm, locations, capacity, vehicles),
+        decodeChromosome(
+          newPerm,
+          locations,
+          capacity,
+          vehicles,
+          distMatrix,
+          depotIdx,
+        ),
         distMatrix,
         depotIdx,
         locations,
-        capacity
+        capacity,
       );
 
       if (newEval.fitness < fitnessCache[i].fitness) {
@@ -430,11 +553,18 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
 
       const newPerm = mutateRouteNeighborhood(foodSources[selected]);
       const newEval = evaluateSolution(
-        decodeChromosome(newPerm, locations, capacity, vehicles),
+        decodeChromosome(
+          newPerm,
+          locations,
+          capacity,
+          vehicles,
+          distMatrix,
+          depotIdx,
+        ),
         distMatrix,
         depotIdx,
         locations,
-        capacity
+        capacity,
       );
 
       if (newEval.fitness < fitnessCache[selected].fitness) {
@@ -458,11 +588,18 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
       if (i !== bestSourceIdx && trialLimits[i] > maxTrials) {
         foodSources[i] = getRandomPermutation(customerIndices);
         fitnessCache[i] = evaluateSolution(
-          decodeChromosome(foodSources[i], locations, capacity, vehicles),
+          decodeChromosome(
+            foodSources[i],
+            locations,
+            capacity,
+            vehicles,
+            distMatrix,
+            depotIdx,
+          ),
           distMatrix,
           depotIdx,
           locations,
-          capacity
+          capacity,
         );
         trialLimits[i] = 0;
       }
@@ -483,25 +620,33 @@ function runABC(locations, params, distMatrix, customerIndices, depotIdx, seedSt
   }
 
   return {
-    bestRoutes: decodeChromosome(bestPerm, locations, capacity, vehicles),
+    bestRoutes: decodeChromosome(
+      bestPerm,
+      locations,
+      capacity,
+      vehicles,
+      distMatrix,
+      depotIdx,
+    ),
     bestDistance: bestEval.distance,
     isFeasible: bestEval.isFeasible,
     history,
   };
 }
 
-// --- MEMETIC HYBRID (Full GA + ABC + Relocate/Swap/2-Opt) ---
+// --- MEMETIC HYBRID (60% GA + Memetic Local Search + 40% ABC = 100% Generasi) ---
 function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
   const { generations, popSize, capacity, vehicles } = params;
-  const abcGen = Math.max(10, Math.floor(generations * 0.4));
+  const gaGen = Math.max(1, Math.floor(generations * 0.6));
+  const abcGen = Math.max(1, generations - gaGen);
 
-  // Tahap 1: Eksplorasi global penuh dengan GA
+  // Tahap 1: Eksplorasi global dengan GA (60% generasi)
   const gaResult = runGA(
     locations,
-    { ...params, generations },
+    { ...params, generations: gaGen },
     distMatrix,
     customerIndices,
-    depotIdx
+    depotIdx,
   );
 
   // Poles solusi terbaik hasil GA dengan Relocate + 1-1 Swap + 2-Opt
@@ -510,25 +655,32 @@ function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
     distMatrix,
     depotIdx,
     locations,
-    capacity
+    capacity,
   );
   const refinedGaEval = evaluateSolution(
     refinedGaRoutes,
     distMatrix,
     depotIdx,
     locations,
-    capacity
+    capacity,
   );
 
   const rankedPop = gaResult.finalPopulation
     .map((perm) => ({
       perm,
       fit: evaluateSolution(
-        decodeChromosome(perm, locations, capacity, vehicles),
+        decodeChromosome(
+          perm,
+          locations,
+          capacity,
+          vehicles,
+          distMatrix,
+          depotIdx,
+        ),
         distMatrix,
         depotIdx,
         locations,
-        capacity
+        capacity,
       ).fitness,
     }))
     .sort((a, b) => a.fit - b.fit)
@@ -537,16 +689,40 @@ function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
   const eliteCount = Math.min(5, popSize);
   for (let i = 0; i < eliteCount; i++) {
     const eliteRoutes = refineRoutesMemetic(
-      decodeChromosome(rankedPop[i], locations, capacity, vehicles),
+      decodeChromosome(
+        rankedPop[i],
+        locations,
+        capacity,
+        vehicles,
+        distMatrix,
+        depotIdx,
+      ),
       distMatrix,
       depotIdx,
       locations,
-      capacity
+      capacity,
     );
     rankedPop[i] = eliteRoutes.flat();
   }
 
-  // Tahap 2: Eksploitasi lokal lanjutan dengan ABC pada populasi elite
+  // Sinkronisasi seed ABC menggunakan Split Prins agar konsisten
+  const seedPerm = refinedGaRoutes.flat();
+  const seedDecodedEval = evaluateSolution(
+    decodeChromosome(
+      seedPerm,
+      locations,
+      capacity,
+      vehicles,
+      distMatrix,
+      depotIdx,
+    ),
+    distMatrix,
+    depotIdx,
+    locations,
+    capacity,
+  );
+
+  // Tahap 2: Eksploitasi lokal lanjutan dengan ABC (40% sisa generasi)
   const abcResult = runABC(
     locations,
     { ...params, generations: abcGen },
@@ -555,9 +731,9 @@ function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
     depotIdx,
     {
       population: rankedPop,
-      bestPerm: refinedGaRoutes.flat(),
-      bestEval: refinedGaEval,
-    }
+      bestPerm: seedPerm,
+      bestEval: seedDecodedEval,
+    },
   );
 
   // Pemolesan akhir (Final Polishing) pada rute terbaik ABC
@@ -566,14 +742,14 @@ function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
     distMatrix,
     depotIdx,
     locations,
-    capacity
+    capacity,
   );
   const polishedAbcEval = evaluateSolution(
     polishedAbcRoutes,
     distMatrix,
     depotIdx,
     locations,
-    capacity
+    capacity,
   );
 
   // Pilih solusi terbaik mutlak dari seluruh tahapan Hybrid
@@ -587,7 +763,7 @@ function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
         distMatrix,
         depotIdx,
         locations,
-        capacity
+        capacity,
       ),
     },
     { routes: polishedAbcRoutes, evalRes: polishedAbcEval },
@@ -598,7 +774,7 @@ function runHybrid(locations, params, distMatrix, customerIndices, depotIdx) {
   const history = [
     ...gaResult.history,
     ...abcResult.history.map((h, i) => ({
-      generation: generations + i + 1,
+      generation: gaGen + i + 1,
       fitness:
         i === abcResult.history.length - 1
           ? Number(winner.evalRes.distance.toFixed(2))
@@ -627,20 +803,50 @@ self.onmessage = function (e) {
 
   if (algorithm === "BENCHMARK") {
     const t0 = performance.now();
-    const gaRes = runGA(locations, params, distMatrix, customerIndices, depotIdx);
+    const gaRes = runGA(
+      locations,
+      params,
+      distMatrix,
+      customerIndices,
+      depotIdx,
+    );
     const t1 = performance.now();
-    const abcRes = runABC(locations, params, distMatrix, customerIndices, depotIdx);
+    const abcRes = runABC(
+      locations,
+      params,
+      distMatrix,
+      customerIndices,
+      depotIdx,
+    );
     const t2 = performance.now();
-    const hybridRes = runHybrid(locations, params, distMatrix, customerIndices, depotIdx);
+    const hybridRes = runHybrid(
+      locations,
+      params,
+      distMatrix,
+      customerIndices,
+      depotIdx,
+    );
     const t3 = performance.now();
 
     self.postMessage({
       status: "SUCCESS",
       isBenchmark: true,
       data: {
-        GA: { ...gaRes, time: (t1 - t0).toFixed(1), executionTime: (t1 - t0).toFixed(1) },
-        ABC: { ...abcRes, time: (t2 - t1).toFixed(1), executionTime: (t2 - t1).toFixed(1) },
-        HYBRID: { ...hybridRes, time: (t3 - t2).toFixed(1), executionTime: (t3 - t2).toFixed(1) },
+        GA: {
+          ...gaRes,
+          time: (t1 - t0).toFixed(1),
+          executionTime: (t1 - t0).toFixed(1),
+        },
+        ABC: {
+          ...abcRes,
+          time: (t2 - t1).toFixed(1),
+          executionTime: (t2 - t1).toFixed(1),
+        },
+        HYBRID: {
+          ...hybridRes,
+          time: (t3 - t2).toFixed(1),
+          executionTime: (t3 - t2).toFixed(1),
+        },
       },
     });
     return;
@@ -653,7 +859,13 @@ self.onmessage = function (e) {
   } else if (algorithm === "ABC") {
     result = runABC(locations, params, distMatrix, customerIndices, depotIdx);
   } else {
-    result = runHybrid(locations, params, distMatrix, customerIndices, depotIdx);
+    result = runHybrid(
+      locations,
+      params,
+      distMatrix,
+      customerIndices,
+      depotIdx,
+    );
   }
   const endTime = performance.now();
 

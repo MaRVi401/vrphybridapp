@@ -13,14 +13,17 @@ export function useVrpSolver() {
     );
 
     workerRef.current.onmessage = (e) => {
-      const { status, isBenchmark, data } = e.data;
+      const { status, isBenchmark, algorithm, data } = e.data;
       if (status === 'SUCCESS') {
         if (isBenchmark) {
           setBenchmarkResult(data);
 
-          // Pilih pemenang terbaik: prioritas status Valid (isFeasible), lalu jarak terpendek
           const bestCandidate = Object.entries(data)
-            .map(([algName, res]) => ({ ...res, winnerAlgorithm: algName }))
+            .map(([algName, res]) => ({
+              ...res,
+              algorithm: algName,
+              winnerAlgorithm: algName,
+            }))
             .sort((a, b) => {
               if (a.isFeasible !== b.isFeasible) {
                 return a.isFeasible ? -1 : 1;
@@ -30,7 +33,7 @@ export function useVrpSolver() {
 
           setResult(bestCandidate);
         } else {
-          setResult(data);
+          setResult({ ...data, algorithm });
           setBenchmarkResult(null);
         }
       }
@@ -49,6 +52,8 @@ export function useVrpSolver() {
 
   const runSolver = (algorithm, locations, params) => {
     if (!locations || locations.length === 0 || !workerRef.current) return;
+    setResult(null);
+    setBenchmarkResult(null);
     setIsCalculating(true);
     workerRef.current.postMessage({ algorithm, locations, params });
   };

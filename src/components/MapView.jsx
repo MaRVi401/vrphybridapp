@@ -1,11 +1,18 @@
-import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents } from 'react-leaflet';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  Polyline,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-// Custom Marker menggunakan Tabler Icons (CDN)
 const depotIcon = L.divIcon({
-  className: 'bg-transparent border-0',
+  className: "bg-transparent border-0",
   html: `
     <div style="
       width: 32px;
@@ -29,7 +36,7 @@ const depotIcon = L.divIcon({
 });
 
 const customerIcon = L.divIcon({
-  className: 'bg-transparent border-0',
+  className: "bg-transparent border-0",
   html: `
     <div style="
       width: 28px;
@@ -52,10 +59,17 @@ const customerIcon = L.divIcon({
   popupAnchor: [0, -28],
 });
 
-// Warna rute tiap kendaraan (sinkron dengan kartu Armada di App.jsx)
-const routeColors = ['#E63946', '#2A9D8F', '#F4A261', '#9C27B0', '#3F51B5', '#00BCD4', '#E91E63', '#8BC34A'];
+const routeColors = [
+  "#E63946",
+  "#2A9D8F",
+  "#F4A261",
+  "#9C27B0",
+  "#3F51B5",
+  "#00BCD4",
+  "#E91E63",
+  "#8BC34A",
+];
 
-// Component Listener Klik di Peta
 function MapEventsHandler({ onMapClick }) {
   useMapEvents({
     click(e) {
@@ -65,72 +79,94 @@ function MapEventsHandler({ onMapClick }) {
   return null;
 }
 
+// Auto-fit zoom saat dataset berubah / di-import
+function MapBoundsUpdater({ locations }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!locations || locations.length === 0) return;
+    if (locations.length === 1) {
+      map.setView([locations[0].lat, locations[0].lng], 12);
+      return;
+    }
+    const bounds = L.latLngBounds(locations.map((l) => [l.lat, l.lng]));
+    map.fitBounds(bounds, { padding: [36, 36], maxZoom: 13 });
+  }, [locations, map]);
+
+  return null;
+}
+
 export default function MapView({ locations, routes, onMapClick }) {
   const depot = locations.find((l) => l.isDepot) || locations[0];
   const center = depot ? [depot.lat, depot.lng] : [-6.3265, 108.32];
 
   return (
-    <MapContainer
-      center={center}
-      zoom={11}
-      attributionControl={false}
-      className="w-full h-full rounded-lg"
-    >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    <div className="relative w-full h-full">
+      <MapContainer
+        center={center}
+        zoom={11}
+        attributionControl={false}
+        className="w-full h-full rounded-lg"
+      >
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-      <MapEventsHandler onMapClick={onMapClick} />
+        <MapEventsHandler onMapClick={onMapClick} />
+        <MapBoundsUpdater locations={locations} />
 
-      {/* Render Markers */}
-      {locations.map((loc) => (
-        <Marker
-          key={loc.id}
-          position={[loc.lat, loc.lng]}
-          icon={loc.isDepot ? depotIcon : customerIcon}
-        >
-          <Popup>
-            <div className="font-sans">
-              <strong className="block text-sm">{loc.name}</strong>
-              <span className="text-xs text-gray-600">
-                {loc.isDepot ? 'Titik Depot Utama' : `Demand: ${loc.demand} unit`}
-              </span>
-              <br />
-              <small className="text-gray-400">
-                Lat: {loc.lat.toFixed(4)}, Lng: {loc.lng.toFixed(4)}
-              </small>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+        {/* Render Markers */}
+        {locations.map((loc) => (
+          <Marker
+            key={loc.id}
+            position={[loc.lat, loc.lng]}
+            icon={loc.isDepot ? depotIcon : customerIcon}
+          >
+            <Popup>
+              <div className="font-sans">
+                <strong className="block text-sm">{loc.name}</strong>
+                <span className="text-xs text-gray-600">
+                  {loc.isDepot
+                    ? "Titik Depot Utama"
+                    : `Demand: ${loc.demand} unit`}
+                </span>
+                <br />
+                <small className="text-gray-400">
+                  Lat: {loc.lat.toFixed(4)}, Lng: {loc.lng.toFixed(4)}
+                </small>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
 
-      {/* Render Route Lines */}
-      {routes &&
-        depot &&
-        routes.map((route, rIdx) => {
-          if (!route || route.length === 0) return null;
+        {/* Render Route Lines */}
+        {routes &&
+          depot &&
+          routes.map((route, rIdx) => {
+            if (!route || route.length === 0) return null;
 
-          const validWaypoints = route
-            .map((cIdx) => locations[cIdx])
-            .filter(Boolean)
-            .map((loc) => [loc.lat, loc.lng]);
+            const validWaypoints = route
+              .map((cIdx) => locations[cIdx])
+              .filter(Boolean)
+              .map((loc) => [loc.lat, loc.lng]);
 
-          if (validWaypoints.length === 0) return null;
+            if (validWaypoints.length === 0) return null;
 
-          const polylineCoords = [
-            [depot.lat, depot.lng],
-            ...validWaypoints,
-            [depot.lat, depot.lng],
-          ];
+            const polylineCoords = [
+              [depot.lat, depot.lng],
+              ...validWaypoints,
+              [depot.lat, depot.lng],
+            ];
 
-          return (
-            <Polyline
-              key={`route-${rIdx}`}
-              positions={polylineCoords}
-              color={routeColors[rIdx % routeColors.length]}
-              weight={4}
-              opacity={0.85}
-            />
-          );
-        })}
-    </MapContainer>
+            return (
+              <Polyline
+                key={`route-${rIdx}`}
+                positions={polylineCoords}
+                color={routeColors[rIdx % routeColors.length]}
+                weight={4}
+                opacity={0.85}
+              />
+            );
+          })}
+      </MapContainer>
+    </div>
   );
 }
