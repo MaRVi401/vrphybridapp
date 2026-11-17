@@ -3,32 +3,56 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents } from '
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Fix Icon Leaflet Default di React
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+// Custom Marker menggunakan Tabler Icons (CDN)
+const depotIcon = L.divIcon({
+  className: 'bg-transparent border-0',
+  html: `
+    <div style="
+      width: 32px;
+      height: 32px;
+      background: #e11d48;
+      color: #ffffff;
+      border: 2.5px solid #ffffff;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+    ">
+      <i class="ti ti-building-warehouse" style="transform: rotate(45deg); font-size: 16px;"></i>
+    </div>
+  `,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
 });
 
-// Custom Icon untuk Depot & Customer
-const depotIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
+const customerIcon = L.divIcon({
+  className: 'bg-transparent border-0',
+  html: `
+    <div style="
+      width: 28px;
+      height: 28px;
+      background: #4f46e5;
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    ">
+      <i class="ti ti-map-pin" style="transform: rotate(45deg); font-size: 14px;"></i>
+    </div>
+  `,
+  iconSize: [28, 28],
+  iconAnchor: [14, 28],
+  popupAnchor: [0, -28],
 });
 
-const customerIcon = new L.Icon({
-  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
-  popupAnchor: [1, -34],
-});
-
-// Warna rute tiap kendaraan
+// Warna rute tiap kendaraan (sinkron dengan kartu Armada di App.jsx)
 const routeColors = ['#E63946', '#2A9D8F', '#F4A261', '#9C27B0', '#3F51B5', '#00BCD4', '#E91E63', '#8BC34A'];
 
 // Component Listener Klik di Peta
@@ -46,11 +70,13 @@ export default function MapView({ locations, routes, onMapClick }) {
   const center = depot ? [depot.lat, depot.lng] : [-6.3265, 108.32];
 
   return (
-    <MapContainer center={center} zoom={11} className="w-full h-full rounded-lg">
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+    <MapContainer
+      center={center}
+      zoom={11}
+      attributionControl={false}
+      className="w-full h-full rounded-lg"
+    >
+      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
       <MapEventsHandler onMapClick={onMapClick} />
 
@@ -63,9 +89,9 @@ export default function MapView({ locations, routes, onMapClick }) {
         >
           <Popup>
             <div className="font-sans">
-              <strong className="block text-base">{loc.name}</strong>
-              <span className="text-sm text-gray-600">
-                {loc.isDepot ? 'Titik Depot' : `Demand: ${loc.demand} unit`}
+              <strong className="block text-sm">{loc.name}</strong>
+              <span className="text-xs text-gray-600">
+                {loc.isDepot ? 'Titik Depot Utama' : `Demand: ${loc.demand} unit`}
               </span>
               <br />
               <small className="text-gray-400">

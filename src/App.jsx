@@ -331,12 +331,14 @@ export default function App() {
         className={`sticky top-2 z-30 min-h-[3.25rem] px-3 sm:px-4 py-2 lg:py-0 rounded-xl shadow-sm border backdrop-blur-md flex items-center justify-between gap-2 shrink-0 mb-3 transition-colors ${cardSurface}`}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse shrink-0"></span>
+          <div className="w-7 h-7 rounded-lg bg-indigo-600/15 text-indigo-500 flex items-center justify-center shrink-0">
+            <i className="ti ti-route text-base"></i>
+          </div>
           <h1 className="text-sm sm:text-base font-black tracking-tight truncate">
             VRP Solver Indramayu
           </h1>
           <span
-            className={`text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold border shrink-0 ${
+            className={`text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold border shrink-0 ${
               isDarkMode
                 ? "bg-indigo-950/80 text-indigo-300 border-indigo-800"
                 : "bg-indigo-50 text-indigo-700 border-indigo-200"
@@ -346,8 +348,8 @@ export default function App() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {/* Badge Kapasitas Total (Tampil di tablet/desktop) */}
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          {/* Badge Kapasitas Total */}
           <div
             className={`hidden md:flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg border ${
               isCapacityEnough
@@ -359,6 +361,7 @@ export default function App() {
                   : "bg-rose-50 border-rose-200 text-rose-700"
             }`}
           >
+            <i className="ti ti-package text-sm"></i>
             <span>Muatan:</span>
             <strong>
               {totalCustomerDemand} / {totalFleetCapacity}
@@ -369,25 +372,30 @@ export default function App() {
             <button
               onClick={handleExportResult}
               title="Download Hasil JSON"
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
                 isDarkMode
                   ? "bg-slate-700/80 border-slate-600 text-slate-200 hover:bg-slate-600"
                   : "bg-slate-50 border-slate-300 text-slate-700 hover:bg-slate-200"
               }`}
             >
-              ⬇ <span className="hidden sm:inline">Export</span>
+              <i className="ti ti-download text-sm"></i>
+              <span className="hidden sm:inline">Export</span>
             </button>
           )}
 
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition border cursor-pointer ${
               isDarkMode
                 ? "bg-slate-700 border-slate-600 text-amber-300 hover:bg-slate-600"
                 : "bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200"
             }`}
           >
-            {isDarkMode ? "☀️" : "🌙"}
+            <i
+              className={`ti ${
+                isDarkMode ? "ti-sun text-amber-300" : "ti-moon text-slate-700"
+              } text-sm`}
+            ></i>
             <span className="hidden sm:inline">
               {isDarkMode ? "Light" : "Dark"}
             </span>
@@ -399,7 +407,12 @@ export default function App() {
             disabled={isCalculating}
             className="hidden lg:inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] disabled:bg-slate-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
           >
-            {isCalculating ? "⏳ Kalkulasi..." : "▶ Jalankan Optimasi"}
+            <i
+              className={`ti ${
+                isCalculating ? "ti-loader-2 animate-spin" : "ti-player-play"
+              } text-sm`}
+            ></i>
+            <span>{isCalculating ? "Kalkulasi..." : "Jalankan Optimasi"}</span>
           </button>
         </div>
       </header>
@@ -408,7 +421,7 @@ export default function App() {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0 lg:overflow-hidden">
         {/* KOLOM KANAN (DESKTOP) / ATAS (MOBILE): Peta + Panel Hasil */}
         <div className="order-1 lg:order-2 lg:col-span-8 flex flex-col gap-3 min-h-0">
-          {/* Peta Interaktif (Selalu mounted agar Leaflet responsif tanpa grey-tile) */}
+          {/* Peta Interaktif */}
           <div
             className={`p-2 rounded-xl shadow-sm border h-[300px] sm:h-[380px] lg:h-auto lg:flex-1 flex flex-col min-h-0 relative transition-colors ${cardSurface}`}
           >
@@ -419,11 +432,14 @@ export default function App() {
                 onMapClick={handleMapClick}
               />
             </div>
-            <div
-              className={`mt-1.5 px-1 flex justify-between items-center text-[10px] opacity-60`}
-            >
-              <span>💡 Ketuk peta untuk menambah titik pelanggan baru</span>
-              <span>{locations.length} Titik Terdaftar</span>
+            <div className="mt-1.5 px-1 flex justify-between items-center text-[10px] opacity-65">
+              <span className="flex items-center gap-1">
+                <i className="ti ti-click text-xs text-indigo-500"></i>
+                Ketuk peta untuk menambah titik pelanggan baru
+              </span>
+              <span className="font-semibold">
+                {locations.length} Titik Terdaftar
+              </span>
             </div>
           </div>
 
@@ -432,14 +448,22 @@ export default function App() {
             className={`grid grid-cols-3 gap-1 p-1 rounded-xl border lg:hidden ${cardSurface}`}
           >
             {[
-              { id: "result", label: "📊 Hasil & Grafik" },
-              { id: "locations", label: `📍 Lokasi (${locations.length})` },
-              { id: "params", label: "⚙️ Parameter" },
+              { id: "result", icon: "ti-chart-line", label: "Hasil & Grafik" },
+              {
+                id: "locations",
+                icon: "ti-map-pin",
+                label: `Lokasi (${locations.length})`,
+              },
+              {
+                id: "params",
+                icon: "ti-adjustments-horizontal",
+                label: "Parameter",
+              },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setMobileTab(tab.id)}
-                className={`py-2 px-2 rounded-lg text-xs font-bold transition ${
+                className={`py-2 px-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition ${
                   mobileTab === tab.id
                     ? "bg-indigo-600 text-white shadow-sm"
                     : isDarkMode
@@ -447,12 +471,13 @@ export default function App() {
                       : "text-slate-600 hover:text-slate-900"
                 }`}
               >
-                {tab.label}
+                <i className={`ti ${tab.icon} text-sm`}></i>
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
 
-          {/* Panel Hasil & Grafik (Tampil di Desktop, atau saat mobileTab === 'result') */}
+          {/* Panel Hasil & Grafik */}
           <div
             className={`${
               mobileTab === "result" ? "flex" : "hidden lg:flex"
@@ -466,18 +491,32 @@ export default function App() {
             >
               <div className="flex flex-col h-full min-h-0">
                 <div className="flex justify-between items-center mb-1.5 shrink-0">
-                  <h3 className="text-xs font-bold uppercase tracking-wider opacity-80">
-                    {showTradeOff ? "💡 Analisis Trade-Off" : "Hasil Optimasi"}
+                  <h3 className="text-xs font-bold uppercase tracking-wider opacity-80 flex items-center gap-1.5">
+                    <i
+                      className={`ti ${
+                        showTradeOff
+                          ? "ti-bulb text-amber-500"
+                          : "ti-route-2 text-indigo-500"
+                      } text-sm`}
+                    ></i>
+                    <span>
+                      {showTradeOff ? "Analisis Trade-Off" : "Hasil Optimasi"}
+                    </span>
                   </h3>
                   <button
                     onClick={() => setShowTradeOff(!showTradeOff)}
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition ${
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 transition cursor-pointer ${
                       isDarkMode
                         ? "bg-indigo-950 text-indigo-300 hover:bg-indigo-900"
                         : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
                     }`}
                   >
-                    {showTradeOff ? "Lihat Rute" : "Trade-Off"}
+                    <i
+                      className={`ti ${
+                        showTradeOff ? "ti-list-details" : "ti-scale"
+                      } text-xs`}
+                    ></i>
+                    <span>{showTradeOff ? "Rute" : "Trade-Off"}</span>
                   </button>
                 </div>
 
@@ -537,22 +576,26 @@ export default function App() {
                         <span className="text-xl sm:text-2xl font-black text-indigo-500">
                           {activeResult.bestDistance.toFixed(2)} km
                         </span>
-                        <div className="text-[10px] opacity-60">
-                          Waktu:{" "}
-                          <strong>
+                        <div className="text-[10px] opacity-65 flex items-center gap-1">
+                          <i className="ti ti-clock text-xs"></i>
+                          <span>
                             {activeResult.executionTime || activeResult.time} ms
-                          </strong>{" "}
-                          • {activeResult.bestRoutes.length} Armada
+                          </span>
+                          <span>•</span>
+                          <i className="ti ti-truck text-xs"></i>
+                          <span>{activeResult.bestRoutes.length} Armada</span>
                         </div>
                       </div>
 
                       {activeResult.isFeasible === false ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 border border-rose-500/30">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center gap-1">
+                          <i className="ti ti-alert-triangle text-xs"></i>
                           Overload
                         </span>
                       ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                          Optimal Valid
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 flex items-center gap-1">
+                          <i className="ti ti-circle-check text-xs"></i>
+                          Valid
                         </span>
                       )}
                     </div>
@@ -582,7 +625,8 @@ export default function App() {
                             }`}
                           >
                             <div className="flex justify-between items-center mb-0.5">
-                              <span className="font-bold text-[11px]">
+                              <span className="font-bold text-[11px] flex items-center gap-1">
+                                <i className="ti ti-truck-delivery text-xs opacity-75"></i>
                                 Armada #{i + 1}
                               </span>
                               <span
@@ -595,10 +639,16 @@ export default function App() {
                                 {routeLoad}/{params.capacity} unit
                               </span>
                             </div>
-                            <div className="text-[10px] opacity-85">
-                              Depot ➔{" "}
-                              {r.map((c) => locations[c]?.name).join(" ➔ ")} ➔
-                              Depot
+                            <div className="text-[10px] opacity-85 flex flex-wrap items-center gap-1">
+                              <span className="font-semibold">Depot</span>
+                              {r.map((c, idx) => (
+                                <React.Fragment key={idx}>
+                                  <i className="ti ti-arrow-right text-[10px] opacity-50"></i>
+                                  <span>{locations[c]?.name}</span>
+                                </React.Fragment>
+                              ))}
+                              <i className="ti ti-arrow-right text-[10px] opacity-50"></i>
+                              <span className="font-semibold">Depot</span>
                             </div>
                           </div>
                         );
@@ -606,10 +656,13 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex-1 flex items-center justify-center text-center text-xs opacity-60 italic py-4 px-2">
-                    {isRouteOutdated
-                      ? "Data lokasi diperbarui. Jalankan optimasi untuk menghitung rute baru."
-                      : "Tekan 'Jalankan Optimasi' untuk memulai pencarian rute terbaik."}
+                  <div className="flex-1 flex flex-col items-center justify-center text-center text-xs opacity-60 italic py-4 px-2 gap-1">
+                    <i className="ti ti-info-circle text-lg"></i>
+                    <span>
+                      {isRouteOutdated
+                        ? "Data lokasi diperbarui. Jalankan optimasi untuk menghitung rute baru."
+                        : "Tekan 'Jalankan Optimasi' untuk memulai pencarian rute terbaik."}
+                    </span>
                   </div>
                 )}
               </div>
@@ -619,8 +672,9 @@ export default function App() {
             <div className="w-full md:w-7/12 h-44 md:h-full flex flex-col min-h-0 overflow-hidden">
               {activeBenchmark ? (
                 <div className="h-full flex flex-col min-h-0">
-                  <h3 className="text-xs font-bold uppercase tracking-wider mb-1.5 opacity-80">
-                    🔥 Perbandingan Benchmark
+                  <h3 className="text-xs font-bold uppercase tracking-wider mb-1.5 opacity-80 flex items-center gap-1.5">
+                    <i className="ti ti-flame text-orange-500 text-sm"></i>
+                    <span>Perbandingan Benchmark</span>
                   </h3>
                   <div className="flex-1 overflow-x-auto overflow-y-auto text-xs">
                     <table className="w-full text-left min-w-[340px]">
@@ -658,12 +712,12 @@ export default function App() {
                             </td>
                             <td className="p-1.5">
                               {d.isFeasible === false ? (
-                                <span className="text-rose-500 font-bold">
-                                  Overload
+                                <span className="text-rose-500 font-bold inline-flex items-center gap-0.5">
+                                  <i className="ti ti-x text-xs"></i> Overload
                                 </span>
                               ) : (
-                                <span className="text-emerald-500 font-bold">
-                                  Valid
+                                <span className="text-emerald-500 font-bold inline-flex items-center gap-0.5">
+                                  <i className="ti ti-check text-xs"></i> Valid
                                 </span>
                               )}
                             </td>
@@ -675,8 +729,9 @@ export default function App() {
                 </div>
               ) : (
                 <div className="h-full flex flex-col min-h-0">
-                  <h3 className="text-xs font-bold uppercase tracking-wider mb-1 opacity-80">
-                    Kurva Konvergensi Fitness
+                  <h3 className="text-xs font-bold uppercase tracking-wider mb-1 opacity-80 flex items-center gap-1.5">
+                    <i className="ti ti-chart-line text-indigo-500 text-sm"></i>
+                    <span>Kurva Konvergensi Fitness</span>
                   </h3>
                   <div className="flex-1 min-h-0 w-full">
                     <FitnessChart
@@ -699,8 +754,9 @@ export default function App() {
             } p-3 rounded-xl shadow-sm border shrink-0 space-y-2.5 transition-colors ${cardSurface}`}
           >
             <div className="flex justify-between items-center">
-              <h2 className="text-xs font-bold uppercase tracking-wider opacity-80">
-                Konfigurasi Algoritma
+              <h2 className="text-xs font-bold uppercase tracking-wider opacity-80 flex items-center gap-1.5">
+                <i className="ti ti-adjustments-horizontal text-indigo-500 text-sm"></i>
+                <span>Konfigurasi Algoritma</span>
               </h2>
               <input
                 type="file"
@@ -711,9 +767,10 @@ export default function App() {
               />
               <label
                 htmlFor="file-upload"
-                className="text-[11px] text-indigo-500 hover:underline font-bold cursor-pointer"
+                className="text-[11px] text-indigo-500 hover:underline font-bold cursor-pointer flex items-center gap-1"
               >
-                📂 Import CSV/JSON
+                <i className="ti ti-upload text-xs"></i>
+                <span>Import CSV/JSON</span>
               </label>
             </div>
 
@@ -727,10 +784,10 @@ export default function App() {
                     : "bg-slate-50 border-slate-200 text-indigo-700"
                 }`}
               >
-                <option value="HYBRID">⚡ Hybrid (GA + ABC)</option>
-                <option value="GA">🧬 Genetic Algorithm (GA)</option>
-                <option value="ABC">🐝 Artificial Bee Colony (ABC)</option>
-                <option value="BENCHMARK">🔥 Benchmark Semua Algoritma</option>
+                <option value="HYBRID">Hybrid (GA + ABC)</option>
+                <option value="GA">Genetic Algorithm (GA)</option>
+                <option value="ABC">Artificial Bee Colony (ABC)</option>
+                <option value="BENCHMARK">Benchmark Semua Algoritma</option>
               </select>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
@@ -768,8 +825,9 @@ export default function App() {
               mobileTab === "locations" ? "block" : "hidden lg:block"
             } p-3 rounded-xl shadow-sm border shrink-0 space-y-2 transition-colors ${cardSurface}`}
           >
-            <h2 className="text-xs font-bold uppercase tracking-wider opacity-80">
-              Tambah Titik Lokasi
+            <h2 className="text-xs font-bold uppercase tracking-wider opacity-80 flex items-center gap-1.5">
+              <i className="ti ti-map-pin-plus text-indigo-500 text-sm"></i>
+              <span>Tambah Titik Lokasi</span>
             </h2>
             <form onSubmit={handleAddManual} className="space-y-2 text-xs">
               <input
@@ -836,9 +894,10 @@ export default function App() {
                 </label>
                 <button
                   type="submit"
-                  className="px-3.5 py-1.5 rounded-lg font-bold transition ml-auto bg-indigo-600 text-white hover:bg-indigo-700"
+                  className="px-3.5 py-1.5 rounded-lg font-bold transition ml-auto bg-indigo-600 text-white hover:bg-indigo-700 flex items-center gap-1 cursor-pointer"
                 >
-                  + Tambah
+                  <i className="ti ti-plus text-xs"></i>
+                  <span>Tambah</span>
                 </button>
               </div>
             </form>
@@ -851,21 +910,24 @@ export default function App() {
             } p-3 rounded-xl shadow-sm border max-h-96 lg:max-h-none lg:flex-1 flex-col min-h-0 transition-colors ${cardSurface}`}
           >
             <div className="flex justify-between items-center mb-2 shrink-0">
-              <h2 className="text-xs font-bold uppercase tracking-wider opacity-80">
-                Daftar Titik ({locations.length})
+              <h2 className="text-xs font-bold uppercase tracking-wider opacity-80 flex items-center gap-1.5">
+                <i className="ti ti-list-check text-indigo-500 text-sm"></i>
+                <span>Daftar Titik ({locations.length})</span>
               </h2>
               <div className="flex items-center gap-2.5">
                 <button
                   onClick={() => updateLocations(defaultLocations)}
-                  className="text-[11px] text-indigo-500 hover:underline font-bold"
+                  className="text-[11px] text-indigo-500 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
                 >
-                  Reset Default
+                  <i className="ti ti-rotate-clockwise text-xs"></i>
+                  <span>Default</span>
                 </button>
                 <button
                   onClick={() => updateLocations([])}
-                  className="text-[11px] text-rose-500 hover:underline font-bold"
+                  className="text-[11px] text-rose-500 hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
                 >
-                  Hapus Semua
+                  <i className="ti ti-trash text-xs"></i>
+                  <span>Reset</span>
                 </button>
               </div>
             </div>
@@ -895,6 +957,13 @@ export default function App() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="font-bold flex items-center gap-1.5 truncate text-xs">
+                        <i
+                          className={`ti ${
+                            loc.isDepot
+                              ? "ti-building-warehouse text-rose-500"
+                              : "ti-map-pin text-indigo-500"
+                          } text-sm shrink-0`}
+                        ></i>
                         <span
                           className={`truncate ${
                             loc.isDepot ? "text-rose-500" : "opacity-95"
@@ -908,7 +977,7 @@ export default function App() {
                           </span>
                         )}
                       </div>
-                      <div className="text-[10px] opacity-60 truncate mt-0.5">
+                      <div className="text-[10px] opacity-60 truncate mt-0.5 pl-5">
                         {loc.isDepot
                           ? "Pusat Distribusi"
                           : `Demand: ${loc.demand} unit`}{" "}
@@ -923,7 +992,8 @@ export default function App() {
                             e.stopPropagation();
                             handleSetDepot(loc.id);
                           }}
-                          className={`px-2 py-1.5 lg:py-1 rounded-md text-[10px] font-bold transition ${
+                          title="Jadikan Depot"
+                          className={`px-2 py-1.5 lg:py-1 rounded-md text-[10px] font-bold transition cursor-pointer ${
                             isDarkMode
                               ? "bg-rose-950 text-rose-300 hover:bg-rose-900"
                               : "bg-rose-100 text-rose-700 hover:bg-rose-200"
@@ -938,13 +1008,14 @@ export default function App() {
                           e.stopPropagation();
                           setEditingLoc(loc);
                         }}
-                        className={`px-2 py-1.5 lg:py-1 rounded-md text-[10px] font-bold transition ${
+                        title="Edit Lokasi"
+                        className={`p-1.5 lg:p-1 rounded-md text-xs transition cursor-pointer ${
                           isDarkMode
                             ? "bg-slate-700 text-slate-200 hover:bg-slate-600"
                             : "bg-slate-200 text-slate-700 hover:bg-slate-300"
                         }`}
                       >
-                        Edit
+                        <i className="ti ti-pencil text-xs"></i>
                       </button>
 
                       <button
@@ -954,10 +1025,10 @@ export default function App() {
                             locations.filter((l) => l.id !== loc.id)
                           );
                         }}
-                        className="text-rose-500 hover:bg-rose-500/10 rounded-md font-bold px-2 py-1 text-xs transition"
+                        className="text-rose-500 hover:bg-rose-500/10 rounded-md p-1.5 lg:p-1 transition cursor-pointer"
                         title="Hapus lokasi"
                       >
-                        ✕
+                        <i className="ti ti-x text-xs"></i>
                       </button>
                     </div>
                   </div>
@@ -991,9 +1062,14 @@ export default function App() {
         <button
           onClick={handleRunOptimization}
           disabled={isCalculating}
-          className="bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:bg-slate-500 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold transition shadow-md shrink-0"
+          className="bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] disabled:bg-slate-500 text-white px-4 py-2.5 rounded-xl text-xs font-extrabold transition shadow-md shrink-0 flex items-center gap-1.5"
         >
-          {isCalculating ? "⏳ Menghitung..." : "▶ Jalankan Optimasi"}
+          <i
+            className={`ti ${
+              isCalculating ? "ti-loader-2 animate-spin" : "ti-player-play"
+            } text-sm`}
+          ></i>
+          <span>{isCalculating ? "Menghitung..." : "Jalankan Optimasi"}</span>
         </button>
       </div>
 
@@ -1003,9 +1079,18 @@ export default function App() {
           <div
             className={`rounded-2xl p-4 max-w-sm w-full shadow-2xl border space-y-3 ${cardSurface}`}
           >
-            <h3 className="text-xs font-bold uppercase tracking-wider">
-              Edit Data Lokasi
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <i className="ti ti-edit text-indigo-500 text-sm"></i>
+                <span>Edit Data Lokasi</span>
+              </h3>
+              <button
+                onClick={() => setEditingLoc(null)}
+                className="opacity-60 hover:opacity-100 p-1"
+              >
+                <i className="ti ti-x text-sm"></i>
+              </button>
+            </div>
             <form onSubmit={handleSaveEdit} className="space-y-2.5 text-xs">
               <div>
                 <label className="text-[10px] opacity-60 block mb-1">
@@ -1094,9 +1179,10 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700"
+                  className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-bold hover:bg-indigo-700 flex items-center gap-1"
                 >
-                  Simpan Perubahan
+                  <i className="ti ti-device-floppy text-sm"></i>
+                  <span>Simpan</span>
                 </button>
               </div>
             </form>
